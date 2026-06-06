@@ -13,6 +13,7 @@ import ShiftCard from "./components/ShiftCard";
 import ShiftModal from "./components/ShiftModal";
 import SpecialModal from "./components/SpecialModal";
 import SetupNotice from "./components/SetupNotice";
+import InstallButton from "./components/InstallButton";
 
 export default function App() {
   // Supabase 키가 아직 없으면 설정 안내 화면
@@ -66,13 +67,30 @@ function Scheduler() {
     return () => { active = false; };
   }, [weekKey]);
 
-  // 실시간 구독: 다른 사람이 수정하면 자동 갱신
+  // 실시간 구독: 다른 사람이 수정하면 자동 갱신 (앱을 보고 있는 동안)
   useEffect(() => {
     const unsubscribe = subscribeWeek(weekKey, () => {
       if (!modalOpenRef.current) refresh();
     });
     return unsubscribe;
   }, [weekKey, refresh]);
+
+  // 안전장치: 앱으로 돌아왔을 때 + 주기적으로 자동 갱신
+  // (모바일은 화면을 끄거나 다른 앱으로 가면 실시간 연결이 끊겨,
+  //  복귀하는 순간 최신 상태로 맞춰줄 필요가 있음)
+  useEffect(() => {
+    const syncIfVisible = () => {
+      if (document.visibilityState === "visible" && !modalOpenRef.current) refresh();
+    };
+    document.addEventListener("visibilitychange", syncIfVisible);
+    window.addEventListener("focus", syncIfVisible);
+    const id = setInterval(syncIfVisible, 15000);
+    return () => {
+      document.removeEventListener("visibilitychange", syncIfVisible);
+      window.removeEventListener("focus", syncIfVisible);
+      clearInterval(id);
+    };
+  }, [refresh]);
 
   useEffect(() => {
     modalOpenRef.current = !!(modal || specialModal !== null || editingName);
@@ -163,6 +181,7 @@ function Scheduler() {
               </button>
             )}
           </div>
+          <InstallButton />
         </div>
 
         {/* week nav */}
