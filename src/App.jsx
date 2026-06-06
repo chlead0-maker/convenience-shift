@@ -314,7 +314,7 @@ function Scheduler() {
                 <div style={{ fontFamily: "'Do Hyeon', sans-serif", fontSize: 30, lineHeight: 1.1, color: C.ink }}>
                   {storeName || "우리 편의점"} <span style={{ color: C.accent }}>시프트표</span>
                 </div>
-                <div className="text-xs mt-1" style={{ color: C.sub }}>매장 이름을 누르면 수정돼요 · 주간 근무표</div>
+                <div className="text-sm mt-1" style={{ color: C.sub }}>매장 이름을 누르면 바꿀 수 있어요</div>
               </button>
             )}
           </div>
@@ -324,7 +324,7 @@ function Scheduler() {
         {/* period nav */}
         <div className="flex items-center justify-between rounded-xl px-3 py-2.5 mb-4"
           style={{ background: C.card, border: `1px solid ${C.line}` }}>
-          <button onClick={() => go(-1)} className="px-3 py-1.5 rounded-lg font-bold" style={{ background: "#F0EFEA", color: C.ink }}>← 이전</button>
+          <button onClick={() => go(-1)} className="px-3.5 py-2 rounded-lg font-bold text-base" style={{ background: "#F0EFEA", color: C.ink }}>← 이전</button>
           <div className="text-center">
             <button onClick={() => setCalendarOpen(true)}
               className="font-bold text-base sm:text-lg inline-flex items-center gap-1.5 px-2 py-0.5 rounded-lg"
@@ -335,7 +335,7 @@ function Scheduler() {
               <button onClick={() => setAnchorDate(new Date())} className="text-xs underline" style={{ color: C.accent }}>오늘로</button>
             </div>
           </div>
-          <button onClick={() => go(1)} className="px-3 py-1.5 rounded-lg font-bold" style={{ background: "#F0EFEA", color: C.ink }}>다음 →</button>
+          <button onClick={() => go(1)} className="px-3.5 py-2 rounded-lg font-bold text-base" style={{ background: "#F0EFEA", color: C.ink }}>다음 →</button>
         </div>
 
         {/* view toggle + tools */}
@@ -343,7 +343,7 @@ function Scheduler() {
           <div className="flex gap-1 p-1 rounded-xl w-fit" style={{ background: "#ECEAE2" }}>
             {VIEWS.map(([v, label]) => (
               <button key={v} onClick={() => changeView(v)}
-                className="text-sm font-semibold px-3 py-1.5 rounded-lg transition"
+                className="text-base font-semibold px-3.5 py-2 rounded-lg transition"
                 style={view === v
                   ? { background: C.card, color: C.ink, boxShadow: "0 1px 2px rgba(0,0,0,0.08)" }
                   : { background: "transparent", color: C.sub }}>
@@ -353,33 +353,33 @@ function Scheduler() {
           </div>
           <div className="flex gap-2 flex-wrap">
             <button onClick={() => setEmpManagerOpen(true)}
-              className="text-sm font-semibold px-3 py-1.5 rounded-lg border" style={{ color: C.ink, borderColor: C.line, background: C.card }}>
+              className="text-base font-semibold px-3.5 py-2 rounded-lg border" style={{ color: C.ink, borderColor: C.line, background: C.card }}>
               👥 직원
             </button>
             {view !== "month" && (
               <>
                 <button onClick={() => setDayOffOpen(true)}
-                  className="text-sm font-semibold px-3 py-1.5 rounded-lg border" style={{ color: C.ink, borderColor: C.line, background: C.card }}>
+                  className="text-base font-semibold px-3.5 py-2 rounded-lg border" style={{ color: C.ink, borderColor: C.line, background: C.card }}>
                   🌴 휴무
                 </button>
                 <button onClick={() => setEventModalOpen(true)}
-                  className="text-sm font-semibold px-3 py-1.5 rounded-lg border" style={{ color: C.ink, borderColor: C.line, background: C.card }}>
+                  className="text-base font-semibold px-3.5 py-2 rounded-lg border" style={{ color: C.ink, borderColor: C.line, background: C.card }}>
                   📦 이벤트
                 </button>
               </>
             )}
             <button onClick={() => setTipsOpen(true)}
-              className="text-sm font-semibold px-3 py-1.5 rounded-lg border" style={{ color: "#9A6B00", borderColor: "#F2D98C", background: "#FFF8E6" }}>
+              className="text-base font-semibold px-3.5 py-2 rounded-lg border" style={{ color: "#9A6B00", borderColor: "#F2D98C", background: "#FFF8E6" }}>
               💡 꿀팁
             </button>
           </div>
         </div>
 
         {/* share note */}
-        <div className="text-xs rounded-lg px-3 py-2 mb-4 flex items-center gap-2"
+        <div className="text-sm rounded-lg px-3 py-2.5 mb-4 flex items-center gap-2"
           style={{ background: "#E9F6F3", color: C.accentDark }}>
           <span>👥</span>
-          <span>이 표는 공유받은 모든 직원이 함께 보고 수정할 수 있어요. 변경은 자동 저장·실시간 반영됩니다.</span>
+          <span>모두 함께 보고 고칠 수 있어요. 바꾸면 자동 저장돼요.</span>
         </div>
 
         {error && (
@@ -409,13 +409,13 @@ function Scheduler() {
                     <div key={d.dayIndex} className="rounded-xl p-2.5 flex flex-col"
                       style={{ background: C.card, border: isToday ? `2px solid ${C.accent}` : `1px solid ${C.line}`, minHeight: 130 }}>
                       <div className="flex items-baseline justify-between mb-1">
-                        <div className="font-bold" style={{ color: headColor }}>
-                          {d.dayName}<span className="text-xs ml-1" style={{ color: C.sub }}>{fmtMD(d.date)}</span>
+                        <div className="font-bold text-lg" style={{ color: headColor }}>
+                          {d.dayName}<span className="text-sm ml-1" style={{ color: C.sub }}>{fmtMD(d.date)}</span>
                         </div>
-                        {isToday && <span className="text-xs font-bold" style={{ color: C.accent }}>오늘</span>}
+                        {isToday && <span className="text-sm font-bold" style={{ color: C.accent }}>오늘</span>}
                       </div>
                       <button onClick={() => setSpecialModal(d.dayIndex)}
-                        className="text-left text-xs rounded px-2 py-1 mb-2 truncate"
+                        className="text-left text-sm rounded px-2 py-1.5 mb-2 truncate"
                         style={d.special ? { background: "#FFF4DA", color: "#9A6B00", fontWeight: 600 } : { background: "#F4F3EE", color: C.sub }}>
                         {d.special ? `⚑ ${d.special}` : "+ 특이사항"}
                       </button>
@@ -425,7 +425,7 @@ function Scheduler() {
                         ))}
                       </div>
                       <button onClick={() => setModal({ dayIndex: d.dayIndex, initial: null })}
-                        className="w-full mt-1 py-1.5 rounded-lg text-sm font-semibold border border-dashed"
+                        className="w-full mt-1 py-2 rounded-lg text-base font-semibold border border-dashed"
                         style={{ color: C.accent, borderColor: C.accent }}>+ 시프트</button>
                     </div>
                   );
@@ -443,7 +443,7 @@ function Scheduler() {
             )}
 
             {/* legend */}
-            <div className="flex flex-wrap items-center gap-3 mt-4 text-xs" style={{ color: C.sub }}>
+            <div className="flex flex-wrap items-center gap-3 mt-4 text-sm" style={{ color: C.sub }}>
               {view === "cards" ? (
                 Object.values(BAND).filter((b) => b.label).map((b) => (
                   <span key={b.label} className="flex items-center gap-1.5">
@@ -469,8 +469,8 @@ function Scheduler() {
             {summaryList.length > 0 && (
               <div className="mt-6 rounded-xl p-4" style={{ background: C.card, border: `1px solid ${C.line}` }}>
                 <div className="flex items-baseline justify-between mb-3 flex-wrap gap-2">
-                  <div className="font-bold" style={{ color: C.ink }}>{summaryTitle}</div>
-                  <div className="text-sm" style={{ color: C.sub }}>
+                  <div className="font-bold text-lg" style={{ color: C.ink }}>{summaryTitle}</div>
+                  <div className="text-base" style={{ color: C.sub }}>
                     총 {totalHrs % 1 === 0 ? totalHrs : totalHrs.toFixed(1)}시간 · 예상 인건비{" "}
                     <span className="font-bold" style={{ color: C.accentDark }}>{won(totalCost)}</span>
                   </div>
@@ -488,19 +488,19 @@ function Scheduler() {
                       <div key={name} className="flex items-center gap-2 rounded-lg px-3 py-2" style={{ background: "#F8F7F3" }}>
                         <span style={{ width: 10, height: 10, borderRadius: 10, background: personColor(name), flexShrink: 0 }} />
                         <div className="min-w-0 flex-1">
-                          <div className="font-semibold text-sm truncate" style={{ color: C.ink }}>
-                            {name}{monthly && <span className="text-[10px] ml-1 px-1 rounded" style={{ background: "#EDE7F6", color: "#5E35B1" }}>월급제</span>}
+                          <div className="font-semibold text-base truncate" style={{ color: C.ink }}>
+                            {name}{monthly && <span className="text-[11px] ml-1 px-1 rounded" style={{ background: "#EDE7F6", color: "#5E35B1" }}>월급제</span>}
                           </div>
-                          <div className="text-xs" style={{ color: C.sub }}>
+                          <div className="text-sm" style={{ color: C.sub }}>
                             {v.count}회 · {v.hrs % 1 === 0 ? v.hrs : v.hrs.toFixed(1)}시간
                             {monthly ? (emp.monthly_pay ? ` · 월급 ${emp.monthly_pay.toLocaleString()}` : "") : (wage ? ` · 시급 ${wage.toLocaleString()}` : "")}
                           </div>
-                          <div className="text-xs font-bold mt-0.5" style={{ color: hasPay ? C.accentDark : C.sub }}>
+                          <div className="text-base font-bold mt-0.5" style={{ color: hasPay ? C.accentDark : C.sub }}>
                             {hasPay ? won(v.cost) : (monthly ? "월급 미설정" : "시급 미설정")}
-                            {monthly && hasPay && <span className="font-normal" style={{ color: C.sub }}> (이 기간 환산)</span>}
+                            {monthly && hasPay && <span className="font-normal text-sm" style={{ color: C.sub }}> (이 기간 환산)</span>}
                           </div>
                           {!monthly && extras.length > 0 && (
-                            <div className="text-[10px]" style={{ color: C.sub }}>{extras.join(" · ")}</div>
+                            <div className="text-[12px]" style={{ color: C.sub }}>{extras.join(" · ")}</div>
                           )}
                         </div>
                       </div>

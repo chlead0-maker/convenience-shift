@@ -1,8 +1,22 @@
 @import "tailwindcss";
 
+/* 부모님도 잘 보이시도록 기본 글씨를 키움 (rem 기반 크기·여백이 함께 커짐) */
+html {
+  font-size: 17.5px;
+}
+
 html,
 body,
 #root {
   margin: 0;
   min-height: 100%;
+  line-height: 1.5;
+}
+
+/* 입력칸 글씨도 또렷하게 */
+input,
+button,
+textarea,
+select {
+  font-size: 1rem;
 }

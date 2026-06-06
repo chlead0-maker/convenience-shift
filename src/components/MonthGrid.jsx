@@ -24,7 +24,7 @@ export default function MonthGrid({ anchorDate, today, shiftsByDate, specialByDa
       {/* 요일 헤더 */}
       <div className="grid grid-cols-7">
         {WD.map((w, i) => (
-          <div key={i} className="text-center text-xs font-semibold py-2 border-b"
+          <div key={i} className="text-center text-sm font-bold py-2 border-b"
             style={{ color: i === 6 ? "#D81B60" : i === 5 ? "#3B6EA8" : C.sub, borderColor: C.line }}>
             {w}
           </div>
@@ -47,39 +47,39 @@ export default function MonthGrid({ anchorDate, today, shiftsByDate, specialByDa
             <button
               key={idx}
               onClick={() => onPickDay(date)}
-              className="text-left p-1 border-b border-r flex flex-col"
+              className="text-left p-1.5 border-b border-r flex flex-col"
               style={{
                 borderColor: C.line,
-                minHeight: 96,
+                minHeight: 112,
                 background: isToday ? "#F0FAF8" : otherMonth ? "#FAF9F6" : C.card,
               }}
             >
               <div className="flex items-center justify-between">
-                <span className="text-xs font-bold" style={{ color: dateColor }}>{date.getDate()}</span>
-                {special && <span className="text-[10px]" title={special}>⚑</span>}
+                <span className="text-sm font-bold" style={{ color: dateColor }}>{date.getDate()}</span>
+                {special && <span className="text-xs" title={special}>⚑</span>}
               </div>
 
               <div className="mt-0.5 space-y-0.5 flex-1 overflow-hidden">
                 {shifts.slice(0, 3).map((s) => (
                   <div key={s.id} className="flex items-center gap-1">
-                    <span style={{ width: 6, height: 6, borderRadius: 6, background: personColor(s.name), flexShrink: 0 }} />
-                    <span className="text-[10px] truncate" style={{ color: C.ink }}>
+                    <span style={{ width: 7, height: 7, borderRadius: 7, background: personColor(s.name), flexShrink: 0 }} />
+                    <span className="text-[12px] truncate" style={{ color: C.ink }}>
                       {s.start ? s.start.slice(0, 5) + " " : ""}{s.name}
                     </span>
                   </div>
                 ))}
                 {shifts.length > 3 && (
-                  <div className="text-[10px]" style={{ color: C.sub }}>+{shifts.length - 3}명 더</div>
+                  <div className="text-[12px]" style={{ color: C.sub }}>+{shifts.length - 3}명 더</div>
                 )}
               </div>
 
               {shifts.length > 0 && (
                 <div className="mt-0.5">
-                  <div className="text-[10px]" style={{ color: C.sub }}>
+                  <div className="text-[12px]" style={{ color: C.sub }}>
                     {shifts.length}명 · {totalH % 1 === 0 ? totalH : totalH.toFixed(1)}h
                   </div>
                   {cost > 0 && (
-                    <div className="text-[10px] font-bold" style={{ color: C.accentDark }}>{won(cost)}</div>
+                    <div className="text-[13px] font-bold" style={{ color: C.accentDark }}>{won(cost)}</div>
                   )}
                 </div>
               )}

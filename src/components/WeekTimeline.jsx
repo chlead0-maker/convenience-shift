@@ -1,9 +1,9 @@
 import { C } from "../lib/constants";
 import { fmtMD, isSameDay, personColor, hours } from "../lib/dateUtils";
 
-const HOUR_H = 24;                 // 1시간당 픽셀 높이
+const HOUR_H = 30;                 // 1시간당 픽셀 높이 (가독성 위해 키움)
 const TOTAL_H = 24 * HOUR_H;       // 하루 전체 높이
-const GUTTER = 44;                 // 시간 축(왼쪽) 너비
+const GUTTER = 52;                 // 시간 축(왼쪽) 너비
 const NIGHT_BG = "rgba(91,91,214,0.10)"; // 야간(22~06) 배경
 
 function pad2(n) { return String(n).padStart(2, "0"); }
@@ -63,8 +63,8 @@ function layoutLanes(segs) {
 export default function WeekTimeline({ days, today, onEditShift, onAddShift, onEditSpecial, single }) {
   const now = new Date();
   const nowMin = now.getHours() * 60 + now.getMinutes();
-  const colW = single ? "minmax(0, 1fr)" : "minmax(104px, 1fr)";
-  const minW = single ? 0 : GUTTER + days.length * 104;
+  const colW = single ? "minmax(0, 1fr)" : "minmax(116px, 1fr)";
+  const minW = single ? 0 : GUTTER + days.length * 116;
 
   return (
     <div className="rounded-xl overflow-hidden" style={{ background: C.card, border: `1px solid ${C.line}` }}>
@@ -91,13 +91,13 @@ export default function WeekTimeline({ days, today, onEditShift, onAddShift, onE
                 background: isToday ? "#F0FAF8" : "transparent",
               }}>
                 <div className="flex items-center justify-center gap-1">
-                  <span className="font-bold text-sm" style={{ color: headColor }}>{d.dayName}</span>
-                  <span className="text-[11px]" style={{ color: C.sub }}>{fmtMD(d.date)}</span>
-                  {isToday && <span className="text-[10px] font-bold px-1 rounded" style={{ background: C.accent, color: "#fff" }}>오늘</span>}
+                  <span className="font-bold text-base" style={{ color: headColor }}>{d.dayName}</span>
+                  <span className="text-[13px]" style={{ color: C.sub }}>{fmtMD(d.date)}</span>
+                  {isToday && <span className="text-[11px] font-bold px-1 rounded" style={{ background: C.accent, color: "#fff" }}>오늘</span>}
                 </div>
                 <button
                   onClick={() => onEditSpecial(d.dayIndex)}
-                  className="w-full mt-1 text-left text-[11px] rounded px-1.5 py-0.5 truncate"
+                  className="w-full mt-1 text-left text-[12px] rounded px-1.5 py-1 truncate"
                   style={d.special
                     ? { background: "#FFF4DA", color: "#9A6B00", fontWeight: 600 }
                     : { background: "#F4F3EE", color: C.sub }}
@@ -105,12 +105,12 @@ export default function WeekTimeline({ days, today, onEditShift, onAddShift, onE
                   {d.special ? `⚑ ${d.special}` : "+ 특이사항"}
                 </button>
                 <div className="flex items-center justify-between mt-1">
-                  <span className="text-[11px]" style={{ color: C.sub }}>
+                  <span className="text-[12px]" style={{ color: C.sub }}>
                     {cnt ? `${cnt}명 · ${totalH % 1 === 0 ? totalH : totalH.toFixed(1)}h` : "–"}
                   </span>
                   <button
                     onClick={() => onAddShift(d.dayIndex)}
-                    className="text-[11px] font-bold leading-none px-1.5 py-0.5 rounded"
+                    className="text-base font-bold leading-none px-2 py-0.5 rounded"
                     style={{ color: C.accent, border: `1px dashed ${C.accent}` }}
                     aria-label="시프트 추가"
                   >
@@ -118,12 +118,12 @@ export default function WeekTimeline({ days, today, onEditShift, onAddShift, onE
                   </button>
                 </div>
                 {d.offNames?.length > 0 && (
-                  <div className="text-[10px] mt-0.5 truncate" style={{ color: "#C0392B" }} title={d.offNames.join(", ")}>
+                  <div className="text-[12px] mt-0.5 truncate" style={{ color: "#C0392B" }} title={d.offNames.join(", ")}>
                     🌴 {d.offNames.join(", ")}
                   </div>
                 )}
                 {d.events?.filter((e) => !e.time).map((e) => (
-                  <div key={e.id} className="text-[10px] mt-0.5 truncate rounded px-1 py-0.5"
+                  <div key={e.id} className="text-[12px] mt-0.5 truncate rounded px-1 py-0.5"
                     style={{ background: "#FCEEE9", color: "#C0392B", fontWeight: 600 }} title={e.title}>
                     {e.title}
                   </div>
@@ -135,7 +135,7 @@ export default function WeekTimeline({ days, today, onEditShift, onAddShift, onE
           {/* ── 시간 축(왼쪽) ── */}
           <div className="sticky left-0 z-10 relative border-t" style={{ background: C.card, borderColor: C.line }}>
             {Array.from({ length: 13 }, (_, k) => k * 2).map((h) => (
-              <div key={h} className="absolute right-1 text-[10px]" style={{ top: h * HOUR_H - 6, color: C.sub }}>
+              <div key={h} className="absolute right-1.5 text-[12px] font-semibold" style={{ top: h * HOUR_H - 8, color: C.sub }}>
                 {pad2(h)}:00
               </div>
             ))}
@@ -165,7 +165,7 @@ export default function WeekTimeline({ days, today, onEditShift, onAddShift, onE
                   return (
                     <div key={e.id} className="absolute inset-x-0 z-20 pointer-events-none" style={{ top: (tm / 60) * HOUR_H }}>
                       <div style={{ borderTop: `2px dashed ${e.color || "#C0392B"}` }} />
-                      <span className="inline-block text-[9px] font-bold px-1 rounded-b truncate max-w-full"
+                      <span className="inline-block text-[11px] font-bold px-1.5 rounded-b truncate max-w-full"
                         style={{ background: e.color || "#C0392B", color: "#fff" }}>
                         {e.time} {e.title}
                       </span>
@@ -176,7 +176,7 @@ export default function WeekTimeline({ days, today, onEditShift, onAddShift, onE
                 {/* 시간 미정 시프트 */}
                 {noTime.map((sh) => (
                   <button key={sh.id} onClick={() => onEditShift(sh)}
-                    className="absolute left-1 right-1 top-1 text-[10px] rounded px-1 py-0.5 truncate text-left"
+                    className="absolute left-1 right-1 top-1 text-[12px] rounded px-1 py-0.5 truncate text-left"
                     style={{ background: "#EEE", color: C.sub, border: `1px dashed ${C.line}` }}>
                     {sh.name} · 시간미정
                   </button>
@@ -211,14 +211,14 @@ export default function WeekTimeline({ days, today, onEditShift, onAddShift, onE
                         borderLeft: "3px solid rgba(0,0,0,0.22)",
                       }}
                     >
-                      <div className="text-[11px] font-bold leading-tight truncate" style={{ textShadow: "0 1px 1px rgba(0,0,0,0.25)" }}>
+                      <div className="text-[13px] font-bold leading-tight truncate" style={{ textShadow: "0 1px 1px rgba(0,0,0,0.25)" }}>
                         {s.cont ? "↳ " : ""}{s.name}
                       </div>
-                      {h >= 30 && (
-                        <div className="text-[10px] leading-tight truncate" style={{ opacity: 0.95 }}>{s.label}</div>
+                      {h >= 34 && (
+                        <div className="text-[12px] leading-tight truncate" style={{ opacity: 0.95 }}>{s.label}</div>
                       )}
-                      {h >= 48 && s.role && (
-                        <div className="text-[10px] leading-tight truncate" style={{ opacity: 0.9 }}>{s.role}</div>
+                      {h >= 58 && s.role && (
+                        <div className="text-[12px] leading-tight truncate" style={{ opacity: 0.9 }}>{s.role}</div>
                       )}
                     </button>
                   );
