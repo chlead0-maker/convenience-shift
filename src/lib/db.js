@@ -1,4 +1,5 @@
 import { supabase } from "./supabase";
+import { isoDate, getMonday, addDays } from "./dateUtils";
 
 /* ============================================================
  *  데이터 계층 (Supabase)
@@ -142,6 +143,65 @@ export function subscribeWeek(weekStart, onChange) {
     .subscribe();
 
   // 정리 함수
+  return () => {
+    supabase.removeChannel(channel);
+  };
+}
+
+/* ---------- 월간 보기 지원 ---------- */
+
+// 어떤 달(month)을 그리는 데 필요한 주(월요일) 6개의 week_start 목록
+export function monthWeekStarts(year, month) {
+  const first = new Date(year, month, 1);
+  let mon = getMonday(first);
+  const arr = [];
+  for (let i = 0; i < 6; i++) {
+    arr.push(isoDate(mon));
+    mon = addDays(mon, 7);
+  }
+  return arr;
+}
+
+// "YYYY-MM-DD" 문자열을 로컬 Date 로 (타임존 어긋남 방지)
+function parseDate(s) {
+  const [y, m, d] = s.split("-").map(Number);
+  return new Date(y, m - 1, d);
+}
+
+// 여러 주의 시프트/특이사항을 실제 날짜별로 묶어서 반환
+export async function fetchMonth(weekStarts) {
+  const [shiftsRes, specialRes] = await Promise.all([
+    supabase.from("shifts").select("*").in("week_start", weekStarts),
+    supabase.from("special_days").select("*").in("week_start", weekStarts),
+  ]);
+  if (shiftsRes.error) throw shiftsRes.error;
+  if (specialRes.error) throw specialRes.error;
+
+  const shiftsByDate = {};
+  (shiftsRes.data || []).forEach((r) => {
+    const key = isoDate(addDays(parseDate(r.week_start), r.day));
+    (shiftsByDate[key] ||= []).push(rowToShift(r));
+  });
+  Object.values(shiftsByDate).forEach((list) =>
+    list.sort((a, b) => (a.start || "99").localeCompare(b.start || "99"))
+  );
+
+  const specialByDate = {};
+  (specialRes.data || []).forEach((r) => {
+    specialByDate[isoDate(addDays(parseDate(r.week_start), r.day))] = r.note;
+  });
+
+  return { shiftsByDate, specialByDate };
+}
+
+// 전체 변경 구독 (월간 보기에서 사용 — 여러 주가 보이므로 필터 없이)
+export function subscribeAll(onChange) {
+  const channel = supabase
+    .channel("all-changes")
+    .on("postgres_changes", { event: "*", schema: "public", table: "shifts" }, onChange)
+    .on("postgres_changes", { event: "*", schema: "public", table: "special_days" }, onChange)
+    .on("postgres_changes", { event: "*", schema: "public", table: "settings" }, onChange)
+    .subscribe();
   return () => {
     supabase.removeChannel(channel);
   };

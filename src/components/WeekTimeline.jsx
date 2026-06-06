@@ -1,7 +1,5 @@
 import { C } from "../lib/constants";
-import { addDays, fmtMD, isSameDay, personColor, hours } from "../lib/dateUtils";
-
-const DAY_NAMES = ["월", "화", "수", "목", "금", "토", "일"];
+import { fmtMD, isSameDay, personColor, hours } from "../lib/dateUtils";
 
 const HOUR_H = 24;                 // 1시간당 픽셀 높이
 const TOTAL_H = 24 * HOUR_H;       // 하루 전체 높이
@@ -45,7 +43,6 @@ function layoutLanes(segs) {
     else laneEnds[lane] = s._e;
     s._lane = lane;
   });
-  // 겹치는 묶음(cluster)별 lane 개수
   let cur = [], curEnd = -1;
   const clusters = [];
   sorted.forEach((s) => {
@@ -59,9 +56,15 @@ function layoutLanes(segs) {
   });
 }
 
-export default function WeekTimeline({ monday, week, today, onEditShift, onAddShift, onEditSpecial }) {
+/**
+ * days: [{ dayIndex, date, dayName, shifts, special }]
+ * single: 하루 보기(넓게) 여부
+ */
+export default function WeekTimeline({ days, today, onEditShift, onAddShift, onEditSpecial, single }) {
   const now = new Date();
   const nowMin = now.getHours() * 60 + now.getMinutes();
+  const colW = single ? "minmax(0, 1fr)" : "minmax(104px, 1fr)";
+  const minW = single ? 0 : GUTTER + days.length * 104;
 
   return (
     <div className="rounded-xl overflow-hidden" style={{ background: C.card, border: `1px solid ${C.line}` }}>
@@ -69,46 +72,44 @@ export default function WeekTimeline({ monday, week, today, onEditShift, onAddSh
         <div
           style={{
             display: "grid",
-            gridTemplateColumns: `${GUTTER}px repeat(7, minmax(104px, 1fr))`,
+            gridTemplateColumns: `${GUTTER}px repeat(${days.length}, ${colW})`,
             gridTemplateRows: `auto ${TOTAL_H}px`,
-            minWidth: GUTTER + 7 * 104,
+            minWidth: minW,
           }}
         >
           {/* ── 헤더 행 ── */}
           <div className="sticky left-0 z-20" style={{ background: C.card }} />
-          {DAY_NAMES.map((dn, i) => {
-            const date = addDays(monday, i);
-            const isToday = isSameDay(date, today);
-            const headColor = i === 6 ? "#D81B60" : i === 5 ? "#3B6EA8" : C.ink;
-            const sp = week.special[i];
-            const dayShifts = week.shifts.filter((s) => s.day === i);
-            const cnt = dayShifts.length;
-            const totalH = dayShifts.reduce((a, s) => a + hours(s.start, s.end), 0);
+          {days.map((d) => {
+            const isToday = isSameDay(d.date, today);
+            const wd = d.dayIndex;
+            const headColor = wd === 6 ? "#D81B60" : wd === 5 ? "#3B6EA8" : C.ink;
+            const cnt = d.shifts.length;
+            const totalH = d.shifts.reduce((a, s) => a + hours(s.start, s.end), 0);
             return (
-              <div key={i} className="px-1.5 pt-2 pb-1.5 border-l" style={{
+              <div key={d.dayIndex} className="px-1.5 pt-2 pb-1.5 border-l" style={{
                 borderColor: C.line,
                 background: isToday ? "#F0FAF8" : "transparent",
               }}>
                 <div className="flex items-center justify-center gap-1">
-                  <span className="font-bold text-sm" style={{ color: headColor }}>{dn}</span>
-                  <span className="text-[11px]" style={{ color: C.sub }}>{fmtMD(date)}</span>
+                  <span className="font-bold text-sm" style={{ color: headColor }}>{d.dayName}</span>
+                  <span className="text-[11px]" style={{ color: C.sub }}>{fmtMD(d.date)}</span>
                   {isToday && <span className="text-[10px] font-bold px-1 rounded" style={{ background: C.accent, color: "#fff" }}>오늘</span>}
                 </div>
                 <button
-                  onClick={() => onEditSpecial(i)}
+                  onClick={() => onEditSpecial(d.dayIndex)}
                   className="w-full mt-1 text-left text-[11px] rounded px-1.5 py-0.5 truncate"
-                  style={sp
+                  style={d.special
                     ? { background: "#FFF4DA", color: "#9A6B00", fontWeight: 600 }
                     : { background: "#F4F3EE", color: C.sub }}
                 >
-                  {sp ? `⚑ ${sp}` : "+ 특이사항"}
+                  {d.special ? `⚑ ${d.special}` : "+ 특이사항"}
                 </button>
                 <div className="flex items-center justify-between mt-1">
                   <span className="text-[11px]" style={{ color: C.sub }}>
                     {cnt ? `${cnt}명 · ${totalH % 1 === 0 ? totalH : totalH.toFixed(1)}h` : "–"}
                   </span>
                   <button
-                    onClick={() => onAddShift(i)}
+                    onClick={() => onAddShift(d.dayIndex)}
                     className="text-[11px] font-bold leading-none px-1.5 py-0.5 rounded"
                     style={{ color: C.accent, border: `1px dashed ${C.accent}` }}
                     aria-label="시프트 추가"
@@ -130,13 +131,12 @@ export default function WeekTimeline({ monday, week, today, onEditShift, onAddSh
           </div>
 
           {/* ── 요일별 본문(시간 격자 + 블록) ── */}
-          {DAY_NAMES.map((dn, i) => {
-            const { segs, noTime } = buildDay(week.shifts.filter((s) => s.day === i));
-            const date = addDays(monday, i);
-            const isToday = isSameDay(date, today);
+          {days.map((d) => {
+            const { segs, noTime } = buildDay(d.shifts);
+            const isToday = isSameDay(d.date, today);
             return (
               <div
-                key={i}
+                key={d.dayIndex}
                 className="relative border-l border-t"
                 style={{
                   borderColor: C.line,
