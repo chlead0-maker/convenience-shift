@@ -14,6 +14,8 @@ import ShiftModal from "./components/ShiftModal";
 import SpecialModal from "./components/SpecialModal";
 import SetupNotice from "./components/SetupNotice";
 import InstallButton from "./components/InstallButton";
+import CalendarModal from "./components/CalendarModal";
+import WeekTimeline from "./components/WeekTimeline";
 
 export default function App() {
   // Supabase 키가 아직 없으면 설정 안내 화면
@@ -32,7 +34,16 @@ function Scheduler() {
   const [error, setError] = useState("");
   const [modal, setModal] = useState(null);              // { dayIndex, initial }
   const [specialModal, setSpecialModal] = useState(null); // dayIndex
+  const [calendarOpen, setCalendarOpen] = useState(false);
+  const [view, setView] = useState(() => {
+    try { return localStorage.getItem("cvs-view") || "timeline"; } catch { return "timeline"; }
+  });
   const modalOpenRef = useRef(false);
+
+  const changeView = (v) => {
+    setView(v);
+    try { localStorage.setItem("cvs-view", v); } catch { /* ignore */ }
+  };
 
   const weekKey = isoDate(monday); // week_start (그 주 월요일 날짜)
   const today = new Date();
@@ -190,11 +201,18 @@ function Scheduler() {
           <button onClick={() => setMonday(addDays(monday, -7))}
             className="px-3 py-1.5 rounded-lg font-bold" style={{ background: "#F0EFEA", color: C.ink }}>← 이전</button>
           <div className="text-center">
-            <div className="font-bold text-base sm:text-lg" style={{ color: C.ink }}>
-              {fmtMD(monday)} ~ {fmtMD(addDays(monday, 6))}
+            <button
+              onClick={() => setCalendarOpen(true)}
+              className="font-bold text-base sm:text-lg inline-flex items-center gap-1.5 px-2 py-0.5 rounded-lg"
+              style={{ color: C.ink, background: "#F0EFEA" }}
+            >
+              <span>📅</span>
+              <span>{fmtMD(monday)} ~ {fmtMD(addDays(monday, 6))}</span>
+            </button>
+            <div>
+              <button onClick={() => setMonday(getMonday(new Date()))}
+                className="text-xs underline" style={{ color: C.accent }}>이번 주로</button>
             </div>
-            <button onClick={() => setMonday(getMonday(new Date()))}
-              className="text-xs underline" style={{ color: C.accent }}>이번 주로</button>
           </div>
           <button onClick={() => setMonday(addDays(monday, 7))}
             className="px-3 py-1.5 rounded-lg font-bold" style={{ background: "#F0EFEA", color: C.ink }}>다음 →</button>
@@ -205,6 +223,22 @@ function Scheduler() {
           style={{ background: "#E9F6F3", color: C.accentDark }}>
           <span>👥</span>
           <span>이 표는 공유받은 모든 직원이 함께 보고 수정할 수 있어요. 변경은 자동 저장·실시간 반영됩니다.</span>
+        </div>
+
+        {/* view toggle */}
+        <div className="flex gap-1 mb-4 p-1 rounded-xl w-fit" style={{ background: "#ECEAE2" }}>
+          {[["timeline", "🗂 타임라인"], ["cards", "✏️ 카드 편집"]].map(([v, label]) => (
+            <button
+              key={v}
+              onClick={() => changeView(v)}
+              className="text-sm font-semibold px-3 py-1.5 rounded-lg transition"
+              style={view === v
+                ? { background: C.card, color: C.ink, boxShadow: "0 1px 2px rgba(0,0,0,0.08)" }
+                : { background: "transparent", color: C.sub }}
+            >
+              {label}
+            </button>
+          ))}
         </div>
 
         {/* error */}
@@ -218,6 +252,17 @@ function Scheduler() {
           <div className="text-center py-20" style={{ color: C.sub }}>불러오는 중…</div>
         ) : (
           <>
+            {view === "timeline" ? (
+              <WeekTimeline
+                monday={monday}
+                week={week}
+                today={today}
+                onEditShift={(s) => setModal({ dayIndex: s.day, initial: s })}
+                onAddShift={(i) => setModal({ dayIndex: i, initial: null })}
+                onEditSpecial={(i) => setSpecialModal(i)}
+              />
+            ) : (
+            <>
             {/* grid */}
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-7 gap-3">
               {DAY_NAMES.map((dn, i) => {
@@ -263,14 +308,28 @@ function Scheduler() {
                 );
               })}
             </div>
+            </>
+            )}
 
             {/* legend */}
-            <div className="flex flex-wrap gap-3 mt-4 text-xs" style={{ color: C.sub }}>
-              {Object.values(BAND).filter((b) => b.label).map((b) => (
-                <span key={b.label} className="flex items-center gap-1.5">
-                  <span style={{ width: 12, height: 12, borderRadius: 3, background: b.bar }} /> {b.label}
-                </span>
-              ))}
+            <div className="flex flex-wrap items-center gap-3 mt-4 text-xs" style={{ color: C.sub }}>
+              {view === "timeline" ? (
+                <>
+                  <span className="flex items-center gap-1.5">
+                    <span style={{ width: 12, height: 12, borderRadius: 3, background: "rgba(91,91,214,0.18)", border: `1px solid ${C.line}` }} /> 야간(22~06시)
+                  </span>
+                  <span className="flex items-center gap-1.5">
+                    <span style={{ width: 12, height: 12, borderRadius: 3, background: "#fff", border: `1px solid ${C.line}` }} /> 주간
+                  </span>
+                  <span style={{ color: C.sub }}>· 색은 직원별 구분 · 블록을 누르면 수정</span>
+                </>
+              ) : (
+                Object.values(BAND).filter((b) => b.label).map((b) => (
+                  <span key={b.label} className="flex items-center gap-1.5">
+                    <span style={{ width: 12, height: 12, borderRadius: 3, background: b.bar }} /> {b.label}
+                  </span>
+                ))
+              )}
             </div>
 
             {/* summary */}
@@ -304,6 +363,13 @@ function Scheduler() {
           onClose={() => setModal(null)}
           onSave={upsertShift}
           onDelete={removeShift}
+        />
+      )}
+      {calendarOpen && (
+        <CalendarModal
+          selectedMonday={monday}
+          onPick={(d) => { setMonday(getMonday(d)); setCalendarOpen(false); }}
+          onClose={() => setCalendarOpen(false)}
         />
       )}
       {specialModal !== null && (
