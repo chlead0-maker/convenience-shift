@@ -2,7 +2,7 @@ import { useState } from "react";
 import { C, DAY_NAMES, ROLE_PRESETS } from "../lib/constants";
 
 /* ---------- shift add/edit modal ---------- */
-export default function ShiftModal({ dayIndex, dateLabel, initial, onClose, onSave, onDelete }) {
+export default function ShiftModal({ dayIndex, dateLabel, initial, employees = [], onClose, onSave, onDelete }) {
   const [name, setName] = useState(initial?.name || "");
   const [start, setStart] = useState(initial?.start || "");
   const [end, setEnd] = useState(initial?.end || "");
@@ -47,10 +47,25 @@ export default function ShiftModal({ dayIndex, dateLabel, initial, onClose, onSa
         </div>
 
         <label className="block text-sm font-semibold mb-1" style={{ color: C.ink }}>이름</label>
+        {employees.filter((e) => e.active !== false).length > 0 && (
+          <div className="flex flex-wrap gap-1.5 mb-2">
+            {employees.filter((e) => e.active !== false).map((e) => (
+              <button key={e.id} type="button"
+                onClick={() => { setName(e.name); setErr(false); }}
+                className="text-sm px-2.5 py-1 rounded-full border flex items-center gap-1.5"
+                style={name === e.name
+                  ? { background: C.accent, color: "#fff", borderColor: C.accent }
+                  : { background: "#fff", color: C.ink, borderColor: C.line }}>
+                <span style={{ width: 9, height: 9, borderRadius: 9, background: e.color || "#CBD5E1" }} />
+                {e.name}
+              </button>
+            ))}
+          </div>
+        )}
         <input
           value={name}
           onChange={(e) => { setName(e.target.value); setErr(false); }}
-          placeholder="예: 김알바"
+          placeholder="예: 김알바 (직접 입력도 가능)"
           className="w-full border rounded-lg px-3 py-2 mb-1 outline-none"
           style={inputStyle}
         />

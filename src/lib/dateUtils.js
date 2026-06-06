@@ -27,10 +27,18 @@ export function fmtMD(x) {
   return `${x.getMonth() + 1}.${x.getDate()}`;
 }
 
-// 이름으로 고정 색상 결정 (deterministic per-person color)
+// 직원 명단에서 지정한 커스텀 색 (이름 -> hex). App이 채워줌.
+let COLOR_OVERRIDE = {};
+export function setColorOverrides(map) {
+  COLOR_OVERRIDE = map || {};
+}
+
+// 이름으로 고정 색상 결정 (커스텀 색이 있으면 우선)
 export function personColor(name) {
+  if (name && COLOR_OVERRIDE[name]) return COLOR_OVERRIDE[name];
   let h = 0;
-  for (let i = 0; i < name.length; i++) h = (h * 31 + name.charCodeAt(i)) >>> 0;
+  const s = name || "";
+  for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) >>> 0;
   return PERSON_COLORS[h % PERSON_COLORS.length];
 }
 

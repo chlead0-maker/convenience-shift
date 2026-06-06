@@ -2,13 +2,14 @@ import { useState, useEffect, useCallback, useRef } from "react";
 import { C, DAY_NAMES, BAND } from "./lib/constants";
 import {
   isoDate, getMonday, addDays, fmtMD,
-  personColor, hours, isSameDay,
+  personColor, hours, isSameDay, setColorOverrides,
 } from "./lib/dateUtils";
 import { isSupabaseConfigured } from "./lib/supabase";
 import {
   fetchWeek, insertShift, updateShift, deleteShift,
   setSpecial as dbSetSpecial, fetchStoreName, saveStoreName, subscribeWeek,
   fetchMonth, monthWeekStarts, subscribeAll,
+  fetchEmployees, fetchFixedShifts, fetchDaysOff, fillFixedShifts, subscribeRoster,
 } from "./lib/db";
 import ShiftCard from "./components/ShiftCard";
 import ShiftModal from "./components/ShiftModal";
@@ -18,6 +19,8 @@ import InstallButton from "./components/InstallButton";
 import CalendarModal from "./components/CalendarModal";
 import WeekTimeline from "./components/WeekTimeline";
 import MonthGrid from "./components/MonthGrid";
+import EmployeeManager from "./components/EmployeeManager";
+import DayOffModal from "./components/DayOffModal";
 
 export default function App() {
   if (!isSupabaseConfigured) return <SetupNotice />;
@@ -43,6 +46,11 @@ function Scheduler() {
   const [modal, setModal] = useState(null);
   const [specialModal, setSpecialModal] = useState(null);
   const [calendarOpen, setCalendarOpen] = useState(false);
+  const [employees, setEmployees] = useState([]);
+  const [fixedShifts, setFixedShifts] = useState([]);
+  const [daysOff, setDaysOff] = useState([]);
+  const [empManagerOpen, setEmpManagerOpen] = useState(false);
+  const [dayOffOpen, setDayOffOpen] = useState(false);
   const [view, setView] = useState(() => {
     try { return localStorage.getItem("cvs-view") || "week"; } catch { return "week"; }
   });
@@ -50,6 +58,7 @@ function Scheduler() {
 
   const monday = getMonday(anchorDate);
   const weekKey = isoDate(monday);
+  const weekDates = Array.from({ length: 7 }, (_, i) => isoDate(addDays(monday, i)));
   const today = new Date();
   const year = anchorDate.getFullYear();
   const month = anchorDate.getMonth();
@@ -68,22 +77,39 @@ function Scheduler() {
       if (view === "month") {
         setMonthData(await fetchMonth(monthWeekStarts(year, month)));
       } else {
-        setWeek(await fetchWeek(weekKey));
+        const dates = Array.from({ length: 7 }, (_, i) => isoDate(addDays(getMonday(anchorDate), i)));
+        const [wk, offs] = await Promise.all([fetchWeek(weekKey), fetchDaysOff(dates)]);
+        setWeek(wk);
+        setDaysOff(offs);
       }
       setError("");
     } catch (e) {
       setError(e?.message || "데이터를 불러오지 못했어요.");
     }
-  }, [view, weekKey, year, month]);
+  }, [view, weekKey, year, month, anchorDate]);
 
-  // 매장 이름은 처음 한 번만
+  // 직원 명단 + 고정근무 불러오기 (+ 색상 반영)
+  const loadRoster = useCallback(async () => {
+    try {
+      const [emps, fixed] = await Promise.all([fetchEmployees(), fetchFixedShifts()]);
+      setEmployees(emps);
+      setFixedShifts(fixed);
+      const overrides = {};
+      emps.forEach((e) => { if (e.color) overrides[e.name] = e.color; });
+      setColorOverrides(overrides);
+    } catch { /* 직원 기능 미사용 시 조용히 무시 */ }
+  }, []);
+
+  // 매장 이름 + 직원 명단은 처음 한 번 + 직원/고정근무 변경 실시간 구독
   useEffect(() => {
     let active = true;
     (async () => {
       try { const n = await fetchStoreName(); if (active) setStoreName(n || ""); } catch { /* ignore */ }
     })();
-    return () => { active = false; };
-  }, []);
+    loadRoster();
+    const unsub = subscribeRoster(() => loadRoster());
+    return () => { active = false; unsub(); };
+  }, [loadRoster]);
 
   // 보기/기간이 바뀔 때 데이터 로드
   useEffect(() => {
@@ -95,8 +121,8 @@ function Scheduler() {
           const md = await fetchMonth(monthWeekStarts(year, month));
           if (active) setMonthData(md);
         } else {
-          const d = await fetchWeek(weekKey);
-          if (active) setWeek(d);
+          const [d, offs] = await Promise.all([fetchWeek(weekKey), fetchDaysOff(weekDates)]);
+          if (active) { setWeek(d); setDaysOff(offs); }
         }
         if (active) setError("");
       } catch (e) {
@@ -131,8 +157,8 @@ function Scheduler() {
   }, [refresh]);
 
   useEffect(() => {
-    modalOpenRef.current = !!(modal || specialModal !== null || editingName || calendarOpen);
-  }, [modal, specialModal, editingName, calendarOpen]);
+    modalOpenRef.current = !!(modal || specialModal !== null || editingName || calendarOpen || empManagerOpen || dayOffOpen);
+  }, [modal, specialModal, editingName, calendarOpen, empManagerOpen, dayOffOpen]);
 
   const upsertShift = async (s) => {
     setModal(null);
@@ -157,6 +183,16 @@ function Scheduler() {
     setStoreName(v);
     setEditingName(false);
     try { await saveStoreName(v); } catch (e) { setError(e?.message || "매장 이름 저장에 실패했어요."); }
+  };
+
+  const handleFill = async () => {
+    try {
+      const n = await fillFixedShifts(weekKey, weekDates);
+      await refresh();
+      alert(n > 0
+        ? `고정근무 ${n}건을 이번 주에 채웠어요.`
+        : "추가할 고정근무가 없어요. (이미 있거나 · 휴무 · 직원/고정근무 미등록)");
+    } catch (e) { setError(e?.message || "고정근무 채우기에 실패했어요."); }
   };
 
   // 기간 이동
@@ -192,14 +228,24 @@ function Scheduler() {
   });
   const summaryList = Object.entries(summary).sort((a, b) => b[1].hrs - a[1].hrs);
 
+  // 휴무: 요일별 직원 이름 목록
+  const empNameById = Object.fromEntries(employees.map((e) => [e.id, e.name]));
+  const offByDay = {};
+  daysOff.forEach((o) => {
+    const di = weekDates.indexOf(o.date);
+    if (di >= 0) (offByDay[di] ||= []).push(empNameById[o.employee_id] || "?");
+  });
+
   // 타임라인용 days 배열
   const weekDays = DAY_NAMES.map((dn, i) => ({
     dayIndex: i, date: addDays(monday, i), dayName: dn,
     shifts: week.shifts.filter((s) => s.day === i), special: week.special[i],
+    offNames: offByDay[i] || [],
   }));
   const dayDays = [{
     dayIndex, date: addDays(monday, dayIndex), dayName: DAY_NAMES[dayIndex],
     shifts: week.shifts.filter((s) => s.day === dayIndex), special: week.special[dayIndex],
+    offNames: offByDay[dayIndex] || [],
   }];
 
   return (
@@ -247,17 +293,37 @@ function Scheduler() {
           <button onClick={() => go(1)} className="px-3 py-1.5 rounded-lg font-bold" style={{ background: "#F0EFEA", color: C.ink }}>다음 →</button>
         </div>
 
-        {/* view toggle */}
-        <div className="flex gap-1 mb-4 p-1 rounded-xl w-fit" style={{ background: "#ECEAE2" }}>
-          {VIEWS.map(([v, label]) => (
-            <button key={v} onClick={() => changeView(v)}
-              className="text-sm font-semibold px-3 py-1.5 rounded-lg transition"
-              style={view === v
-                ? { background: C.card, color: C.ink, boxShadow: "0 1px 2px rgba(0,0,0,0.08)" }
-                : { background: "transparent", color: C.sub }}>
-              {label}
+        {/* view toggle + tools */}
+        <div className="flex items-center gap-2 mb-4 flex-wrap">
+          <div className="flex gap-1 p-1 rounded-xl w-fit" style={{ background: "#ECEAE2" }}>
+            {VIEWS.map(([v, label]) => (
+              <button key={v} onClick={() => changeView(v)}
+                className="text-sm font-semibold px-3 py-1.5 rounded-lg transition"
+                style={view === v
+                  ? { background: C.card, color: C.ink, boxShadow: "0 1px 2px rgba(0,0,0,0.08)" }
+                  : { background: "transparent", color: C.sub }}>
+                {label}
+              </button>
+            ))}
+          </div>
+          <div className="flex gap-2 flex-wrap">
+            <button onClick={() => setEmpManagerOpen(true)}
+              className="text-sm font-semibold px-3 py-1.5 rounded-lg border" style={{ color: C.ink, borderColor: C.line, background: C.card }}>
+              👥 직원
             </button>
-          ))}
+            {view !== "month" && (
+              <>
+                <button onClick={() => setDayOffOpen(true)}
+                  className="text-sm font-semibold px-3 py-1.5 rounded-lg border" style={{ color: C.ink, borderColor: C.line, background: C.card }}>
+                  🌴 휴무
+                </button>
+                <button onClick={handleFill}
+                  className="text-sm font-semibold px-3 py-1.5 rounded-lg text-white" style={{ background: C.accent }}>
+                  ⏰ 고정근무 채우기
+                </button>
+              </>
+            )}
+          </div>
         </div>
 
         {/* share note */}
@@ -377,9 +443,28 @@ function Scheduler() {
           dayIndex={modal.dayIndex}
           dateLabel={fmtMD(addDays(monday, modal.dayIndex))}
           initial={modal.initial}
+          employees={employees}
           onClose={() => setModal(null)}
           onSave={upsertShift}
           onDelete={removeShift}
+        />
+      )}
+      {empManagerOpen && (
+        <EmployeeManager
+          employees={employees}
+          fixedShifts={fixedShifts}
+          onChanged={loadRoster}
+          onClose={() => setEmpManagerOpen(false)}
+        />
+      )}
+      {dayOffOpen && (
+        <DayOffModal
+          employees={employees}
+          weekDates={weekDates}
+          weekLabel={`${fmtMD(monday)} ~ ${fmtMD(addDays(monday, 6))}`}
+          daysOff={daysOff}
+          onChanged={refresh}
+          onClose={() => setDayOffOpen(false)}
         />
       )}
       {calendarOpen && (

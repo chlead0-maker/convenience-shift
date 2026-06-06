@@ -117,6 +117,11 @@ export default function WeekTimeline({ days, today, onEditShift, onAddShift, onE
                     ＋
                   </button>
                 </div>
+                {d.offNames?.length > 0 && (
+                  <div className="text-[10px] mt-0.5 truncate" style={{ color: "#C0392B" }} title={d.offNames.join(", ")}>
+                    🌴 {d.offNames.join(", ")}
+                  </div>
+                )}
               </div>
             );
           })}

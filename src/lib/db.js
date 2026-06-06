@@ -194,6 +194,120 @@ export async function fetchMonth(weekStarts) {
   return { shiftsByDate, specialByDate };
 }
 
+/* ============================================================
+ *  직원 명단 / 고정근무 / 휴무 (2차 기능)
+ * ============================================================ */
+
+// 직원 목록
+export async function fetchEmployees() {
+  const { data, error } = await supabase
+    .from("employees")
+    .select("*")
+    .order("sort", { ascending: true })
+    .order("created_at", { ascending: true });
+  if (error) throw error;
+  return data || [];
+}
+
+export async function insertEmployee(emp) {
+  const { data, error } = await supabase.from("employees").insert({
+    name: emp.name, color: emp.color || null, wage: emp.wage || 0, memo: emp.memo || null,
+  }).select().single();
+  if (error) throw error;
+  return data;
+}
+
+export async function updateEmployee(emp) {
+  const { error } = await supabase.from("employees").update({
+    name: emp.name, color: emp.color || null, wage: emp.wage || 0,
+    memo: emp.memo || null, active: emp.active !== false,
+  }).eq("id", emp.id);
+  if (error) throw error;
+}
+
+export async function deleteEmployee(id) {
+  // fixed_shifts / days_off 는 FK on delete cascade 로 자동 삭제됨
+  const { error } = await supabase.from("employees").delete().eq("id", id);
+  if (error) throw error;
+}
+
+// 고정근무 템플릿
+export async function fetchFixedShifts() {
+  const { data, error } = await supabase.from("fixed_shifts").select("*");
+  if (error) throw error;
+  return data || [];
+}
+
+export async function insertFixed(f) {
+  const { error } = await supabase.from("fixed_shifts").insert({
+    employee_id: f.employee_id, day: f.day,
+    start_time: f.start_time || null, end_time: f.end_time || null, role: f.role || null,
+  });
+  if (error) throw error;
+}
+
+export async function deleteFixed(id) {
+  const { error } = await supabase.from("fixed_shifts").delete().eq("id", id);
+  if (error) throw error;
+}
+
+// 휴무
+export async function fetchDaysOff(dates) {
+  const { data, error } = await supabase.from("days_off").select("*").in("date", dates);
+  if (error) throw error;
+  return data || [];
+}
+
+export async function addDayOff(employee_id, date, reason) {
+  const { error } = await supabase.from("days_off")
+    .upsert({ employee_id, date, reason: reason || null }, { onConflict: "employee_id,date" });
+  if (error) throw error;
+}
+
+export async function removeDayOff(id) {
+  const { error } = await supabase.from("days_off").delete().eq("id", id);
+  if (error) throw error;
+}
+
+// 고정근무로 이번 주 채우기 (중복/휴무 제외하고 shifts 에 삽입). 삽입한 개수 반환
+export async function fillFixedShifts(weekKey, weekDates) {
+  const [emps, fixed, offs, current] = await Promise.all([
+    fetchEmployees(), fetchFixedShifts(), fetchDaysOff(weekDates), fetchWeek(weekKey),
+  ]);
+  const empById = Object.fromEntries(emps.map((e) => [e.id, e]));
+  const offSet = new Set(offs.map((o) => `${o.employee_id}|${o.date}`));
+  const existKey = new Set(current.shifts.map((s) => `${s.name}|${s.day}|${s.start}`));
+
+  const rows = [];
+  fixed.forEach((f) => {
+    const emp = empById[f.employee_id];
+    if (!emp || emp.active === false) return;
+    const date = weekDates[f.day];
+    if (offSet.has(`${f.employee_id}|${date}`)) return;            // 휴무 제외
+    if (existKey.has(`${emp.name}|${f.day}|${f.start_time || ""}`)) return; // 중복 제외
+    rows.push({
+      week_start: weekKey, day: f.day, name: emp.name,
+      start_time: f.start_time || null, end_time: f.end_time || null, role: f.role || null,
+    });
+  });
+  if (rows.length) {
+    const { error } = await supabase.from("shifts").insert(rows);
+    if (error) throw error;
+  }
+  return rows.length;
+}
+
+// 직원/고정근무/휴무 변경 구독
+export function subscribeRoster(onChange) {
+  const channel = supabase
+    .channel("roster-changes")
+    .on("postgres_changes", { event: "*", schema: "public", table: "employees" }, onChange)
+    .on("postgres_changes", { event: "*", schema: "public", table: "fixed_shifts" }, onChange)
+    .on("postgres_changes", { event: "*", schema: "public", table: "days_off" }, onChange)
+    .subscribe();
+  return () => { supabase.removeChannel(channel); };
+}
+
 // 전체 변경 구독 (월간 보기에서 사용 — 여러 주가 보이므로 필터 없이)
 export function subscribeAll(onChange) {
   const channel = supabase
