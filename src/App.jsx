@@ -23,6 +23,7 @@ import MonthGrid from "./components/MonthGrid";
 import EmployeeManager from "./components/EmployeeManager";
 import DayOffModal from "./components/DayOffModal";
 import EventModal from "./components/EventModal";
+import { computeLabor } from "./lib/labor";
 
 export default function App() {
   if (!isSupabaseConfigured) return <SetupNotice />;
@@ -213,34 +214,26 @@ function Scheduler() {
   else if (view === "month") periodLabel = `${year}년 ${month + 1}월`;
   else periodLabel = `${fmtMD(monday)} ~ ${fmtMD(addDays(monday, 6))}`;
 
-  // 요약 대상 시프트
-  let summarySource, summaryTitle;
+  // 인건비 계산 대상 (시프트 + 실제 날짜)
+  const empByName = Object.fromEntries(employees.map((e) => [e.name, e]));
+  let laborEntries, includeWeekly, summaryTitle;
   if (view === "month") {
-    summarySource = Object.values(monthData.shiftsByDate).flat();
-    summaryTitle = "이 달 근무 요약";
+    laborEntries = Object.entries(monthData.shiftsByDate).flatMap(([date, list]) =>
+      list.map((s) => ({ name: s.name, start: s.start, end: s.end, date })));
+    includeWeekly = true; summaryTitle = "이 달 근무 요약";
   } else if (view === "day") {
-    summarySource = week.shifts.filter((s) => s.day === dayIndex);
-    summaryTitle = "이 날 근무 요약";
+    laborEntries = week.shifts.filter((s) => s.day === dayIndex)
+      .map((s) => ({ name: s.name, start: s.start, end: s.end, date: weekDates[dayIndex] }));
+    includeWeekly = false; summaryTitle = "이 날 근무 요약";
   } else {
-    summarySource = week.shifts;
-    summaryTitle = "주간 근무 요약";
+    laborEntries = week.shifts.map((s) => ({ name: s.name, start: s.start, end: s.end, date: weekDates[s.day] }));
+    includeWeekly = true; summaryTitle = "주간 근무 요약";
   }
-  const wageByName = Object.fromEntries(employees.map((e) => [e.name, e.wage || 0]));
-  const summary = {};
-  summarySource.forEach((s) => {
-    if (!summary[s.name]) summary[s.name] = { count: 0, hrs: 0 };
-    summary[s.name].count++;
-    summary[s.name].hrs += hours(s.start, s.end);
-  });
-  const summaryList = Object.entries(summary)
-    .map(([name, v]) => {
-      const wage = wageByName[name] || 0;
-      return [name, { ...v, wage, cost: Math.round(v.hrs * wage) }];
-    })
-    .sort((a, b) => b[1].cost - a[1].cost || b[1].hrs - a[1].hrs);
+  const per = computeLabor(laborEntries, empByName, { includeWeekly });
+  const summaryList = Object.entries(per).sort((a, b) => b[1].cost - a[1].cost || b[1].hrs - a[1].hrs);
   const totalCost = summaryList.reduce((a, [, v]) => a + v.cost, 0);
   const totalHrs = summaryList.reduce((a, [, v]) => a + v.hrs, 0);
-  const anyMissingWage = summaryList.some(([, v]) => !v.wage);
+  const anyMissingWage = summaryList.some(([name]) => !(empByName[name]?.wage));
   const won = (n) => "₩" + Math.round(n).toLocaleString();
 
   // 휴무: 요일별 직원 이름 목록
@@ -368,6 +361,7 @@ function Scheduler() {
                 today={today}
                 shiftsByDate={monthData.shiftsByDate}
                 specialByDate={monthData.specialByDate}
+                empByName={empByName}
                 onPickDay={(d) => { setAnchorDate(d); changeView("day"); }}
               />
             ) : view === "cards" ? (
@@ -447,21 +441,30 @@ function Scheduler() {
                   </div>
                 </div>
                 <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2">
-                  {summaryList.map(([name, v]) => (
-                    <div key={name} className="flex items-center gap-2 rounded-lg px-3 py-2" style={{ background: "#F8F7F3" }}>
-                      <span style={{ width: 10, height: 10, borderRadius: 10, background: personColor(name), flexShrink: 0 }} />
-                      <div className="min-w-0 flex-1">
-                        <div className="font-semibold text-sm truncate" style={{ color: C.ink }}>{name}</div>
-                        <div className="text-xs" style={{ color: C.sub }}>
-                          {v.count}회 · {v.hrs % 1 === 0 ? v.hrs : v.hrs.toFixed(1)}시간
-                          {v.wage ? ` · 시급 ${v.wage.toLocaleString()}` : ""}
-                        </div>
-                        <div className="text-xs font-bold mt-0.5" style={{ color: v.wage ? C.accentDark : C.sub }}>
-                          {v.wage ? won(v.cost) : "시급 미설정"}
+                  {summaryList.map(([name, v]) => {
+                    const wage = empByName[name]?.wage || 0;
+                    const extras = [];
+                    if (v.night > 0) extras.push(`야간 +${won(v.night)}`);
+                    if (v.weekly > 0) extras.push(`주휴 +${won(v.weekly)}`);
+                    return (
+                      <div key={name} className="flex items-center gap-2 rounded-lg px-3 py-2" style={{ background: "#F8F7F3" }}>
+                        <span style={{ width: 10, height: 10, borderRadius: 10, background: personColor(name), flexShrink: 0 }} />
+                        <div className="min-w-0 flex-1">
+                          <div className="font-semibold text-sm truncate" style={{ color: C.ink }}>{name}</div>
+                          <div className="text-xs" style={{ color: C.sub }}>
+                            {v.count}회 · {v.hrs % 1 === 0 ? v.hrs : v.hrs.toFixed(1)}시간
+                            {wage ? ` · 시급 ${wage.toLocaleString()}` : ""}
+                          </div>
+                          <div className="text-xs font-bold mt-0.5" style={{ color: wage ? C.accentDark : C.sub }}>
+                            {wage ? won(v.cost) : "시급 미설정"}
+                          </div>
+                          {extras.length > 0 && (
+                            <div className="text-[10px]" style={{ color: C.sub }}>{extras.join(" · ")}</div>
+                          )}
                         </div>
                       </div>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
                 {anyMissingWage && (
                   <div className="text-xs mt-3" style={{ color: C.sub }}>

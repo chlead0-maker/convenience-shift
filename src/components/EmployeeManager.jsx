@@ -66,6 +66,8 @@ function EmployeeEditor({ employee, fixedShifts, onBack, onChanged }) {
   const [wage, setWage] = useState(employee?.wage ? String(employee.wage) : "");
   const [memo, setMemo] = useState(employee?.memo || "");
   const [active, setActive] = useState(employee?.active !== false);
+  const [weeklyAllow, setWeeklyAllow] = useState(!!employee?.weekly_allowance);
+  const [nightAllow, setNightAllow] = useState(!!employee?.night_allowance);
   const [err, setErr] = useState("");
   const [busy, setBusy] = useState(false);
 
@@ -79,7 +81,7 @@ function EmployeeEditor({ employee, fixedShifts, onBack, onChanged }) {
     if (!name.trim()) { setErr("이름을 입력해 주세요."); return; }
     setBusy(true);
     try {
-      const payload = { id: employee?.id, name: name.trim(), color, wage: parseInt(wage, 10) || 0, memo: memo.trim(), active };
+      const payload = { id: employee?.id, name: name.trim(), color, wage: parseInt(wage, 10) || 0, memo: memo.trim(), active, weekly_allowance: weeklyAllow, night_allowance: nightAllow };
       if (employee?.id) await updateEmployee(payload);
       else await insertEmployee(payload);
       await onChanged();
@@ -151,6 +153,23 @@ function EmployeeEditor({ employee, fixedShifts, onBack, onChanged }) {
             {active ? "근무 중" : "숨김(퇴사 등)"}
           </button>
         </div>
+      </div>
+
+      {/* 수당 지급 여부 */}
+      <label className="block text-sm font-semibold mb-1 mt-3" style={{ color: C.ink }}>수당 지급</label>
+      <div className="flex flex-col gap-2">
+        <button onClick={() => setWeeklyAllow((v) => !v)}
+          className="flex items-center justify-between rounded-lg px-3 py-2.5 border text-sm"
+          style={{ borderColor: weeklyAllow ? C.accent : C.line, background: weeklyAllow ? "#E9F6F3" : "#fff" }}>
+          <span style={{ color: C.ink }}>주휴수당 지급 <span style={{ color: C.sub }}>(주 15시간 이상 시)</span></span>
+          <span className="font-bold" style={{ color: weeklyAllow ? C.accent : C.sub }}>{weeklyAllow ? "✓ 지급" : "미지급"}</span>
+        </button>
+        <button onClick={() => setNightAllow((v) => !v)}
+          className="flex items-center justify-between rounded-lg px-3 py-2.5 border text-sm"
+          style={{ borderColor: nightAllow ? C.accent : C.line, background: nightAllow ? "#E9F6F3" : "#fff" }}>
+          <span style={{ color: C.ink }}>야간수당 지급 <span style={{ color: C.sub }}>(22~06시 ×1.5)</span></span>
+          <span className="font-bold" style={{ color: nightAllow ? C.accent : C.sub }}>{nightAllow ? "✓ 지급" : "미지급"}</span>
+        </button>
       </div>
 
       <label className="block text-sm font-semibold mb-1 mt-3" style={{ color: C.ink }}>메모</label>

@@ -61,6 +61,25 @@ export function hours(start, end) {
   return mins / 60;
 }
 
+// "YYYY-MM-DD" → 로컬 Date
+export function parseLocalDate(s) {
+  const [y, m, d] = s.split("-").map(Number);
+  return new Date(y, m - 1, d);
+}
+
+// 야간(22:00~06:00)에 걸치는 근무 시간(시간 단위). 자정 넘김 처리 포함.
+export function nightHours(start, end) {
+  if (!start || !end) return 0;
+  const toMin = (t) => { const [h, m] = t.split(":").map(Number); return h * 60 + (m || 0); };
+  const s = toMin(start), e = toMin(end);
+  const segments = e <= s ? [[s, 1440], [0, e]] : [[s, e]];
+  const nightWindows = [[0, 360], [1320, 1440]]; // 00~06, 22~24
+  const ov = (a1, a2, b1, b2) => Math.max(0, Math.min(a2, b2) - Math.max(a1, b1));
+  let mins = 0;
+  segments.forEach(([i1, i2]) => nightWindows.forEach(([n1, n2]) => { mins += ov(i1, i2, n1, n2); }));
+  return mins / 60;
+}
+
 export function isSameDay(a, b) {
   return (
     a.getFullYear() === b.getFullYear() &&

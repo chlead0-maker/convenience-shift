@@ -1,9 +1,11 @@
 import { C } from "../lib/constants";
 import { isoDate, getMonday, addDays, isSameDay, personColor, hours } from "../lib/dateUtils";
+import { dayLabor } from "../lib/labor";
 
 const WD = ["월", "화", "수", "목", "금", "토", "일"];
+const won = (n) => "₩" + Math.round(n).toLocaleString();
 
-export default function MonthGrid({ anchorDate, today, shiftsByDate, specialByDate, onPickDay }) {
+export default function MonthGrid({ anchorDate, today, shiftsByDate, specialByDate, empByName = {}, onPickDay }) {
   const y = anchorDate.getFullYear();
   const m = anchorDate.getMonth();
   const first = new Date(y, m, 1);
@@ -40,6 +42,7 @@ export default function MonthGrid({ anchorDate, today, shiftsByDate, specialByDa
           const shifts = shiftsByDate[key] || [];
           const special = specialByDate[key];
           const totalH = shifts.reduce((a, s) => a + hours(s.start, s.end), 0);
+          const cost = dayLabor(shifts, empByName);
           return (
             <button
               key={idx}
@@ -71,8 +74,13 @@ export default function MonthGrid({ anchorDate, today, shiftsByDate, specialByDa
               </div>
 
               {shifts.length > 0 && (
-                <div className="text-[10px] mt-0.5" style={{ color: C.accentDark }}>
-                  {shifts.length}명 · {totalH % 1 === 0 ? totalH : totalH.toFixed(1)}h
+                <div className="mt-0.5">
+                  <div className="text-[10px]" style={{ color: C.sub }}>
+                    {shifts.length}명 · {totalH % 1 === 0 ? totalH : totalH.toFixed(1)}h
+                  </div>
+                  {cost > 0 && (
+                    <div className="text-[10px] font-bold" style={{ color: C.accentDark }}>{won(cost)}</div>
+                  )}
                 </div>
               )}
             </button>

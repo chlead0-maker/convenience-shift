@@ -237,6 +237,7 @@ export async function fetchEmployees() {
 export async function insertEmployee(emp) {
   const { data, error } = await supabase.from("employees").insert({
     name: emp.name, color: emp.color || null, wage: emp.wage || 0, memo: emp.memo || null,
+    weekly_allowance: !!emp.weekly_allowance, night_allowance: !!emp.night_allowance,
   }).select().single();
   if (error) throw error;
   return data;
@@ -246,6 +247,7 @@ export async function updateEmployee(emp) {
   const { error } = await supabase.from("employees").update({
     name: emp.name, color: emp.color || null, wage: emp.wage || 0,
     memo: emp.memo || null, active: emp.active !== false,
+    weekly_allowance: !!emp.weekly_allowance, night_allowance: !!emp.night_allowance,
   }).eq("id", emp.id);
   if (error) throw error;
 }
