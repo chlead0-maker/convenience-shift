@@ -327,10 +327,6 @@ function Scheduler() {
               className="text-sm font-semibold px-3 py-1.5 rounded-lg border" style={{ color: C.ink, borderColor: C.line, background: C.card }}>
               👥 직원
             </button>
-            <button onClick={() => setTipsOpen(true)}
-              className="text-sm font-semibold px-3 py-1.5 rounded-lg border" style={{ color: "#9A6B00", borderColor: "#F2D98C", background: "#FFF8E6" }}>
-              💡 꿀팁
-            </button>
             {view !== "month" && (
               <>
                 <button onClick={() => setDayOffOpen(true)}
@@ -348,6 +344,10 @@ function Scheduler() {
               </>
             )}
           </div>
+          <button onClick={() => setTipsOpen(true)}
+            className="text-sm font-semibold px-3 py-1.5 rounded-lg border ml-auto" style={{ color: "#9A6B00", borderColor: "#F2D98C", background: "#FFF8E6" }}>
+            💡 꿀팁
+          </button>
         </div>
 
         {/* share note */}
