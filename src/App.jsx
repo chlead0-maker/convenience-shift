@@ -10,6 +10,7 @@ import {
   setSpecial as dbSetSpecial, fetchStoreName, saveStoreName, subscribeWeek,
   fetchMonth, monthWeekStarts, subscribeAll,
   fetchEmployees, fetchFixedShifts, fetchDaysOff, fillFixedShifts, subscribeRoster,
+  fetchEvents,
 } from "./lib/db";
 import ShiftCard from "./components/ShiftCard";
 import ShiftModal from "./components/ShiftModal";
@@ -21,6 +22,7 @@ import WeekTimeline from "./components/WeekTimeline";
 import MonthGrid from "./components/MonthGrid";
 import EmployeeManager from "./components/EmployeeManager";
 import DayOffModal from "./components/DayOffModal";
+import EventModal from "./components/EventModal";
 
 export default function App() {
   if (!isSupabaseConfigured) return <SetupNotice />;
@@ -49,8 +51,10 @@ function Scheduler() {
   const [employees, setEmployees] = useState([]);
   const [fixedShifts, setFixedShifts] = useState([]);
   const [daysOff, setDaysOff] = useState([]);
+  const [events, setEvents] = useState([]);
   const [empManagerOpen, setEmpManagerOpen] = useState(false);
   const [dayOffOpen, setDayOffOpen] = useState(false);
+  const [eventModalOpen, setEventModalOpen] = useState(false);
   const [view, setView] = useState(() => {
     try { return localStorage.getItem("cvs-view") || "week"; } catch { return "week"; }
   });
@@ -78,9 +82,10 @@ function Scheduler() {
         setMonthData(await fetchMonth(monthWeekStarts(year, month)));
       } else {
         const dates = Array.from({ length: 7 }, (_, i) => isoDate(addDays(getMonday(anchorDate), i)));
-        const [wk, offs] = await Promise.all([fetchWeek(weekKey), fetchDaysOff(dates)]);
+        const [wk, offs, evs] = await Promise.all([fetchWeek(weekKey), fetchDaysOff(dates), fetchEvents(weekKey)]);
         setWeek(wk);
         setDaysOff(offs);
+        setEvents(evs);
       }
       setError("");
     } catch (e) {
@@ -121,8 +126,8 @@ function Scheduler() {
           const md = await fetchMonth(monthWeekStarts(year, month));
           if (active) setMonthData(md);
         } else {
-          const [d, offs] = await Promise.all([fetchWeek(weekKey), fetchDaysOff(weekDates)]);
-          if (active) { setWeek(d); setDaysOff(offs); }
+          const [d, offs, evs] = await Promise.all([fetchWeek(weekKey), fetchDaysOff(weekDates), fetchEvents(weekKey)]);
+          if (active) { setWeek(d); setDaysOff(offs); setEvents(evs); }
         }
         if (active) setError("");
       } catch (e) {
@@ -157,8 +162,8 @@ function Scheduler() {
   }, [refresh]);
 
   useEffect(() => {
-    modalOpenRef.current = !!(modal || specialModal !== null || editingName || calendarOpen || empManagerOpen || dayOffOpen);
-  }, [modal, specialModal, editingName, calendarOpen, empManagerOpen, dayOffOpen]);
+    modalOpenRef.current = !!(modal || specialModal !== null || editingName || calendarOpen || empManagerOpen || dayOffOpen || eventModalOpen);
+  }, [modal, specialModal, editingName, calendarOpen, empManagerOpen, dayOffOpen, eventModalOpen]);
 
   const upsertShift = async (s) => {
     setModal(null);
@@ -220,13 +225,23 @@ function Scheduler() {
     summarySource = week.shifts;
     summaryTitle = "주간 근무 요약";
   }
+  const wageByName = Object.fromEntries(employees.map((e) => [e.name, e.wage || 0]));
   const summary = {};
   summarySource.forEach((s) => {
     if (!summary[s.name]) summary[s.name] = { count: 0, hrs: 0 };
     summary[s.name].count++;
     summary[s.name].hrs += hours(s.start, s.end);
   });
-  const summaryList = Object.entries(summary).sort((a, b) => b[1].hrs - a[1].hrs);
+  const summaryList = Object.entries(summary)
+    .map(([name, v]) => {
+      const wage = wageByName[name] || 0;
+      return [name, { ...v, wage, cost: Math.round(v.hrs * wage) }];
+    })
+    .sort((a, b) => b[1].cost - a[1].cost || b[1].hrs - a[1].hrs);
+  const totalCost = summaryList.reduce((a, [, v]) => a + v.cost, 0);
+  const totalHrs = summaryList.reduce((a, [, v]) => a + v.hrs, 0);
+  const anyMissingWage = summaryList.some(([, v]) => !v.wage);
+  const won = (n) => "₩" + Math.round(n).toLocaleString();
 
   // 휴무: 요일별 직원 이름 목록
   const empNameById = Object.fromEntries(employees.map((e) => [e.id, e.name]));
@@ -235,17 +250,19 @@ function Scheduler() {
     const di = weekDates.indexOf(o.date);
     if (di >= 0) (offByDay[di] ||= []).push(empNameById[o.employee_id] || "?");
   });
+  const eventsByDay = {};
+  events.forEach((e) => { (eventsByDay[e.day] ||= []).push(e); });
 
   // 타임라인용 days 배열
   const weekDays = DAY_NAMES.map((dn, i) => ({
     dayIndex: i, date: addDays(monday, i), dayName: dn,
     shifts: week.shifts.filter((s) => s.day === i), special: week.special[i],
-    offNames: offByDay[i] || [],
+    offNames: offByDay[i] || [], events: eventsByDay[i] || [],
   }));
   const dayDays = [{
     dayIndex, date: addDays(monday, dayIndex), dayName: DAY_NAMES[dayIndex],
     shifts: week.shifts.filter((s) => s.day === dayIndex), special: week.special[dayIndex],
-    offNames: offByDay[dayIndex] || [],
+    offNames: offByDay[dayIndex] || [], events: eventsByDay[dayIndex] || [],
   }];
 
   return (
@@ -316,6 +333,10 @@ function Scheduler() {
                 <button onClick={() => setDayOffOpen(true)}
                   className="text-sm font-semibold px-3 py-1.5 rounded-lg border" style={{ color: C.ink, borderColor: C.line, background: C.card }}>
                   🌴 휴무
+                </button>
+                <button onClick={() => setEventModalOpen(true)}
+                  className="text-sm font-semibold px-3 py-1.5 rounded-lg border" style={{ color: C.ink, borderColor: C.line, background: C.card }}>
+                  📦 이벤트
                 </button>
                 <button onClick={handleFill}
                   className="text-sm font-semibold px-3 py-1.5 rounded-lg text-white" style={{ background: C.accent }}>
@@ -415,23 +436,38 @@ function Scheduler() {
               )}
             </div>
 
-            {/* summary */}
+            {/* summary + 인건비 */}
             {summaryList.length > 0 && (
               <div className="mt-6 rounded-xl p-4" style={{ background: C.card, border: `1px solid ${C.line}` }}>
-                <div className="font-bold mb-3" style={{ color: C.ink }}>{summaryTitle}</div>
+                <div className="flex items-baseline justify-between mb-3 flex-wrap gap-2">
+                  <div className="font-bold" style={{ color: C.ink }}>{summaryTitle}</div>
+                  <div className="text-sm" style={{ color: C.sub }}>
+                    총 {totalHrs % 1 === 0 ? totalHrs : totalHrs.toFixed(1)}시간 · 예상 인건비{" "}
+                    <span className="font-bold" style={{ color: C.accentDark }}>{won(totalCost)}</span>
+                  </div>
+                </div>
                 <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2">
                   {summaryList.map(([name, v]) => (
                     <div key={name} className="flex items-center gap-2 rounded-lg px-3 py-2" style={{ background: "#F8F7F3" }}>
-                      <span style={{ width: 10, height: 10, borderRadius: 10, background: personColor(name) }} />
-                      <div className="min-w-0">
+                      <span style={{ width: 10, height: 10, borderRadius: 10, background: personColor(name), flexShrink: 0 }} />
+                      <div className="min-w-0 flex-1">
                         <div className="font-semibold text-sm truncate" style={{ color: C.ink }}>{name}</div>
                         <div className="text-xs" style={{ color: C.sub }}>
                           {v.count}회 · {v.hrs % 1 === 0 ? v.hrs : v.hrs.toFixed(1)}시간
+                          {v.wage ? ` · 시급 ${v.wage.toLocaleString()}` : ""}
+                        </div>
+                        <div className="text-xs font-bold mt-0.5" style={{ color: v.wage ? C.accentDark : C.sub }}>
+                          {v.wage ? won(v.cost) : "시급 미설정"}
                         </div>
                       </div>
                     </div>
                   ))}
                 </div>
+                {anyMissingWage && (
+                  <div className="text-xs mt-3" style={{ color: C.sub }}>
+                    ※ “시급 미설정” 직원은 👥 직원 관리에서 시급을 입력하면 금액에 반영돼요.
+                  </div>
+                )}
               </div>
             )}
           </>
@@ -465,6 +501,15 @@ function Scheduler() {
           daysOff={daysOff}
           onChanged={refresh}
           onClose={() => setDayOffOpen(false)}
+        />
+      )}
+      {eventModalOpen && (
+        <EventModal
+          weekKey={weekKey}
+          weekLabel={`${fmtMD(monday)} ~ ${fmtMD(addDays(monday, 6))}`}
+          events={events}
+          onChanged={refresh}
+          onClose={() => setEventModalOpen(false)}
         />
       )}
       {calendarOpen && (

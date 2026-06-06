@@ -140,12 +140,37 @@ export function subscribeWeek(weekStart, onChange) {
       { event: "*", schema: "public", table: "settings" },
       onChange
     )
+    .on(
+      "postgres_changes",
+      { event: "*", schema: "public", table: "events", filter: `week_start=eq.${weekStart}` },
+      onChange
+    )
     .subscribe();
 
   // 정리 함수
   return () => {
     supabase.removeChannel(channel);
   };
+}
+
+/* ---------- 타임라인 이벤트 (물류 입고 등) ---------- */
+export async function fetchEvents(weekStart) {
+  const { data, error } = await supabase.from("events").select("*").eq("week_start", weekStart);
+  if (error) throw error;
+  return data || [];
+}
+
+export async function insertEvent(ev) {
+  const { error } = await supabase.from("events").insert({
+    week_start: ev.week_start, day: ev.day,
+    time: ev.time || null, title: ev.title, color: ev.color || null,
+  });
+  if (error) throw error;
+}
+
+export async function deleteEvent(id) {
+  const { error } = await supabase.from("events").delete().eq("id", id);
+  if (error) throw error;
 }
 
 /* ---------- 월간 보기 지원 ---------- */

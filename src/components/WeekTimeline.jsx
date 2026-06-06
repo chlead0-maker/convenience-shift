@@ -122,6 +122,12 @@ export default function WeekTimeline({ days, today, onEditShift, onAddShift, onE
                     🌴 {d.offNames.join(", ")}
                   </div>
                 )}
+                {d.events?.filter((e) => !e.time).map((e) => (
+                  <div key={e.id} className="text-[10px] mt-0.5 truncate rounded px-1 py-0.5"
+                    style={{ background: "#FCEEE9", color: "#C0392B", fontWeight: 600 }} title={e.title}>
+                    {e.title}
+                  </div>
+                ))}
               </div>
             );
           })}
@@ -151,6 +157,21 @@ export default function WeekTimeline({ days, today, onEditShift, onAddShift, onE
                 {/* 야간 음영 (00~06, 22~24) */}
                 <div className="absolute inset-x-0 pointer-events-none" style={{ top: 0, height: 6 * HOUR_H, background: NIGHT_BG }} />
                 <div className="absolute inset-x-0 pointer-events-none" style={{ top: 22 * HOUR_H, height: 2 * HOUR_H, background: NIGHT_BG }} />
+
+                {/* 이벤트 마커 (시간 있는 것) */}
+                {d.events?.filter((e) => e.time).map((e) => {
+                  const tm = toMin(e.time);
+                  if (tm == null) return null;
+                  return (
+                    <div key={e.id} className="absolute inset-x-0 z-20 pointer-events-none" style={{ top: (tm / 60) * HOUR_H }}>
+                      <div style={{ borderTop: `2px dashed ${e.color || "#C0392B"}` }} />
+                      <span className="inline-block text-[9px] font-bold px-1 rounded-b truncate max-w-full"
+                        style={{ background: e.color || "#C0392B", color: "#fff" }}>
+                        {e.time} {e.title}
+                      </span>
+                    </div>
+                  );
+                })}
 
                 {/* 시간 미정 시프트 */}
                 {noTime.map((sh) => (
