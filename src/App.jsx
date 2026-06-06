@@ -23,6 +23,7 @@ import MonthGrid from "./components/MonthGrid";
 import EmployeeManager from "./components/EmployeeManager";
 import DayOffModal from "./components/DayOffModal";
 import EventModal from "./components/EventModal";
+import TipsModal from "./components/TipsModal";
 import { computeLabor } from "./lib/labor";
 
 export default function App() {
@@ -56,6 +57,7 @@ function Scheduler() {
   const [empManagerOpen, setEmpManagerOpen] = useState(false);
   const [dayOffOpen, setDayOffOpen] = useState(false);
   const [eventModalOpen, setEventModalOpen] = useState(false);
+  const [tipsOpen, setTipsOpen] = useState(false);
   const [view, setView] = useState(() => {
     try { return localStorage.getItem("cvs-view") || "week"; } catch { return "week"; }
   });
@@ -163,8 +165,8 @@ function Scheduler() {
   }, [refresh]);
 
   useEffect(() => {
-    modalOpenRef.current = !!(modal || specialModal !== null || editingName || calendarOpen || empManagerOpen || dayOffOpen || eventModalOpen);
-  }, [modal, specialModal, editingName, calendarOpen, empManagerOpen, dayOffOpen, eventModalOpen]);
+    modalOpenRef.current = !!(modal || specialModal !== null || editingName || calendarOpen || empManagerOpen || dayOffOpen || eventModalOpen || tipsOpen);
+  }, [modal, specialModal, editingName, calendarOpen, empManagerOpen, dayOffOpen, eventModalOpen, tipsOpen]);
 
   const upsertShift = async (s) => {
     setModal(null);
@@ -229,11 +231,15 @@ function Scheduler() {
     laborEntries = week.shifts.map((s) => ({ name: s.name, start: s.start, end: s.end, date: weekDates[s.day] }));
     includeWeekly = true; summaryTitle = "주간 근무 요약";
   }
-  const per = computeLabor(laborEntries, empByName, { includeWeekly });
+  const salaryFactor = view === "month" ? 1 : view === "day" ? 1 / 30 : 1 / 4.345;
+  const per = computeLabor(laborEntries, empByName, { includeWeekly, salaryFactor });
   const summaryList = Object.entries(per).sort((a, b) => b[1].cost - a[1].cost || b[1].hrs - a[1].hrs);
   const totalCost = summaryList.reduce((a, [, v]) => a + v.cost, 0);
   const totalHrs = summaryList.reduce((a, [, v]) => a + v.hrs, 0);
-  const anyMissingWage = summaryList.some(([name]) => !(empByName[name]?.wage));
+  const anyMissingWage = summaryList.some(([name]) => {
+    const e = empByName[name] || {};
+    return e.pay_type === "monthly" ? !e.monthly_pay : !e.wage;
+  });
   const won = (n) => "₩" + Math.round(n).toLocaleString();
 
   // 휴무: 요일별 직원 이름 목록
@@ -320,6 +326,10 @@ function Scheduler() {
             <button onClick={() => setEmpManagerOpen(true)}
               className="text-sm font-semibold px-3 py-1.5 rounded-lg border" style={{ color: C.ink, borderColor: C.line, background: C.card }}>
               👥 직원
+            </button>
+            <button onClick={() => setTipsOpen(true)}
+              className="text-sm font-semibold px-3 py-1.5 rounded-lg border" style={{ color: "#9A6B00", borderColor: "#F2D98C", background: "#FFF8E6" }}>
+              💡 꿀팁
             </button>
             {view !== "month" && (
               <>
@@ -442,7 +452,10 @@ function Scheduler() {
                 </div>
                 <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2">
                   {summaryList.map(([name, v]) => {
-                    const wage = empByName[name]?.wage || 0;
+                    const emp = empByName[name] || {};
+                    const monthly = emp.pay_type === "monthly";
+                    const wage = emp.wage || 0;
+                    const hasPay = monthly ? !!emp.monthly_pay : !!wage;
                     const extras = [];
                     if (v.night > 0) extras.push(`야간 +${won(v.night)}`);
                     if (v.weekly > 0) extras.push(`주휴 +${won(v.weekly)}`);
@@ -450,15 +463,18 @@ function Scheduler() {
                       <div key={name} className="flex items-center gap-2 rounded-lg px-3 py-2" style={{ background: "#F8F7F3" }}>
                         <span style={{ width: 10, height: 10, borderRadius: 10, background: personColor(name), flexShrink: 0 }} />
                         <div className="min-w-0 flex-1">
-                          <div className="font-semibold text-sm truncate" style={{ color: C.ink }}>{name}</div>
+                          <div className="font-semibold text-sm truncate" style={{ color: C.ink }}>
+                            {name}{monthly && <span className="text-[10px] ml-1 px-1 rounded" style={{ background: "#EDE7F6", color: "#5E35B1" }}>월급제</span>}
+                          </div>
                           <div className="text-xs" style={{ color: C.sub }}>
                             {v.count}회 · {v.hrs % 1 === 0 ? v.hrs : v.hrs.toFixed(1)}시간
-                            {wage ? ` · 시급 ${wage.toLocaleString()}` : ""}
+                            {monthly ? (emp.monthly_pay ? ` · 월급 ${emp.monthly_pay.toLocaleString()}` : "") : (wage ? ` · 시급 ${wage.toLocaleString()}` : "")}
                           </div>
-                          <div className="text-xs font-bold mt-0.5" style={{ color: wage ? C.accentDark : C.sub }}>
-                            {wage ? won(v.cost) : "시급 미설정"}
+                          <div className="text-xs font-bold mt-0.5" style={{ color: hasPay ? C.accentDark : C.sub }}>
+                            {hasPay ? won(v.cost) : (monthly ? "월급 미설정" : "시급 미설정")}
+                            {monthly && hasPay && <span className="font-normal" style={{ color: C.sub }}> (이 기간 환산)</span>}
                           </div>
-                          {extras.length > 0 && (
+                          {!monthly && extras.length > 0 && (
                             <div className="text-[10px]" style={{ color: C.sub }}>{extras.join(" · ")}</div>
                           )}
                         </div>
@@ -515,6 +531,7 @@ function Scheduler() {
           onClose={() => setEventModalOpen(false)}
         />
       )}
+      {tipsOpen && <TipsModal onClose={() => setTipsOpen(false)} />}
       {calendarOpen && (
         <CalendarModal
           selectedMonday={monday}

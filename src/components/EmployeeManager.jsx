@@ -7,7 +7,6 @@ import {
 
 export default function EmployeeManager({ employees, fixedShifts, onClose, onChanged }) {
   const [editing, setEditing] = useState(null); // null | "new" | employee
-  const [busy, setBusy] = useState(false);
 
   if (editing) {
     return (
@@ -32,6 +31,9 @@ export default function EmployeeManager({ employees, fixedShifts, onClose, onCha
         )}
         {employees.map((e) => {
           const fcount = fixedShifts.filter((f) => f.employee_id === e.id).length;
+          const pay = e.pay_type === "monthly"
+            ? `월급 ${Number(e.monthly_pay || 0).toLocaleString()}원`
+            : `시급 ${Number(e.wage || 0).toLocaleString()}원`;
           return (
             <button key={e.id} onClick={() => setEditing(e)}
               className="w-full flex items-center gap-3 rounded-lg px-3 py-2.5 text-left"
@@ -41,9 +43,7 @@ export default function EmployeeManager({ employees, fixedShifts, onClose, onCha
                 <div className="font-semibold text-sm truncate" style={{ color: C.ink }}>
                   {e.name} {e.active === false && <span className="text-xs" style={{ color: C.sub }}>(숨김)</span>}
                 </div>
-                <div className="text-xs" style={{ color: C.sub }}>
-                  시급 {Number(e.wage || 0).toLocaleString()}원 · 고정근무 {fcount}건
-                </div>
+                <div className="text-xs" style={{ color: C.sub }}>{pay} · 고정근무 {fcount}건</div>
               </div>
               <span style={{ color: C.sub }}>›</span>
             </button>
@@ -51,7 +51,6 @@ export default function EmployeeManager({ employees, fixedShifts, onClose, onCha
         })}
       </div>
       <button onClick={() => setEditing("new")}
-        disabled={busy}
         className="w-full mt-4 py-2.5 rounded-lg font-semibold border border-dashed"
         style={{ color: C.accent, borderColor: C.accent }}>
         ＋ 직원 추가
@@ -61,9 +60,12 @@ export default function EmployeeManager({ employees, fixedShifts, onClose, onCha
 }
 
 function EmployeeEditor({ employee, fixedShifts, onBack, onChanged }) {
+  const isNew = !employee?.id;
   const [name, setName] = useState(employee?.name || "");
   const [color, setColor] = useState(employee?.color || PERSON_COLORS[0]);
+  const [payType, setPayType] = useState(employee?.pay_type || "hourly");
   const [wage, setWage] = useState(employee?.wage ? String(employee.wage) : "");
+  const [monthlyPay, setMonthlyPay] = useState(employee?.monthly_pay ? String(employee.monthly_pay) : "");
   const [memo, setMemo] = useState(employee?.memo || "");
   const [active, setActive] = useState(employee?.active !== false);
   const [weeklyAllow, setWeeklyAllow] = useState(!!employee?.weekly_allowance);
@@ -71,19 +73,41 @@ function EmployeeEditor({ employee, fixedShifts, onBack, onChanged }) {
   const [err, setErr] = useState("");
   const [busy, setBusy] = useState(false);
 
-  // 고정근무 추가용 입력
+  // 신규 등록 시 임시 보관할 고정근무
+  const [pending, setPending] = useState([]);
+
   const [fDays, setFDays] = useState([]);
   const [fStart, setFStart] = useState("");
   const [fEnd, setFEnd] = useState("");
   const [fRole, setFRole] = useState("");
 
+  const monthly = payType === "monthly";
+  const inputStyle = { borderColor: C.line, color: C.ink };
+  const toggleDay = (d) => setFDays((cur) => cur.includes(d) ? cur.filter((x) => x !== d) : [...cur, d]);
+
+  const buildPayload = () => ({
+    id: employee?.id, name: name.trim(), color,
+    pay_type: payType,
+    wage: monthly ? 0 : (parseInt(wage, 10) || 0),
+    monthly_pay: monthly ? (parseInt(monthlyPay, 10) || 0) : 0,
+    memo: memo.trim(), active,
+    weekly_allowance: monthly ? false : weeklyAllow,
+    night_allowance: monthly ? false : nightAllow,
+  });
+
   const saveEmployee = async () => {
     if (!name.trim()) { setErr("이름을 입력해 주세요."); return; }
     setBusy(true);
     try {
-      const payload = { id: employee?.id, name: name.trim(), color, wage: parseInt(wage, 10) || 0, memo: memo.trim(), active, weekly_allowance: weeklyAllow, night_allowance: nightAllow };
-      if (employee?.id) await updateEmployee(payload);
-      else await insertEmployee(payload);
+      if (employee?.id) {
+        await updateEmployee(buildPayload());
+      } else {
+        const created = await insertEmployee(buildPayload());
+        // 신규 등록 시 임시 고정근무도 함께 저장
+        for (const f of pending) {
+          await insertFixed({ employee_id: created.id, day: f.day, start_time: f.start, end_time: f.end, role: f.role });
+        }
+      }
       await onChanged();
       onBack();
     } catch (e) { setErr(e?.message || "저장 실패"); }
@@ -99,8 +123,16 @@ function EmployeeEditor({ employee, fixedShifts, onBack, onChanged }) {
   };
 
   const addFixed = async () => {
-    if (!employee?.id) { setErr("먼저 직원을 저장한 뒤 고정근무를 추가하세요."); return; }
     if (fDays.length === 0) { setErr("요일을 한 개 이상 선택하세요."); return; }
+    if (isNew) {
+      // 임시 보관 (직원 저장 시 함께 등록)
+      setPending((cur) => [
+        ...cur,
+        ...fDays.map((d) => ({ tempId: `${d}-${cur.length}-${fStart}`, day: d, start: fStart, end: fEnd, role: fRole.trim() })),
+      ]);
+      setFDays([]); setFStart(""); setFEnd(""); setFRole(""); setErr("");
+      return;
+    }
     setBusy(true);
     try {
       for (const d of fDays) {
@@ -112,15 +144,17 @@ function EmployeeEditor({ employee, fixedShifts, onBack, onChanged }) {
     finally { setBusy(false); }
   };
 
-  const delFixed = async (id) => {
+  const delFixed = async (item) => {
+    if (isNew) { setPending((cur) => cur.filter((f) => f.tempId !== item.tempId)); return; }
     setBusy(true);
-    try { await deleteFixed(id); await onChanged(); }
+    try { await deleteFixed(item.id); await onChanged(); }
     catch (e) { setErr(e?.message || "삭제 실패"); }
     finally { setBusy(false); }
   };
 
-  const inputStyle = { borderColor: C.line, color: C.ink };
-  const toggleDay = (d) => setFDays((cur) => cur.includes(d) ? cur.filter((x) => x !== d) : [...cur, d]);
+  const fixedList = isNew
+    ? pending.map((f) => ({ ...f, start_time: f.start, end_time: f.end }))
+    : fixedShifts;
 
   return (
     <div>
@@ -138,12 +172,30 @@ function EmployeeEditor({ employee, fixedShifts, onBack, onChanged }) {
         ))}
       </div>
 
-      <div className="flex gap-3 mt-3">
+      {/* 급여 형태 */}
+      <label className="block text-sm font-semibold mb-1 mt-3" style={{ color: C.ink }}>급여 형태</label>
+      <div className="flex gap-2 mb-2">
+        {[["hourly", "시급제"], ["monthly", "월급제"]].map(([v, l]) => (
+          <button key={v} onClick={() => setPayType(v)}
+            className="flex-1 py-2 rounded-lg font-semibold text-sm border"
+            style={payType === v ? { background: C.accent, color: "#fff", borderColor: C.accent } : { background: "#fff", color: C.sub, borderColor: C.line }}>
+            {l}
+          </button>
+        ))}
+      </div>
+
+      <div className="flex gap-3">
         <div className="flex-1">
-          <label className="block text-sm font-semibold mb-1" style={{ color: C.ink }}>시급(원)</label>
-          <input value={wage} onChange={(e) => setWage(e.target.value.replace(/[^0-9]/g, ""))}
-            inputMode="numeric" placeholder="예: 10030"
-            className="w-full border rounded-lg px-3 py-2 outline-none" style={inputStyle} />
+          <label className="block text-sm font-semibold mb-1" style={{ color: C.ink }}>{monthly ? "월급(원)" : "시급(원)"}</label>
+          {monthly ? (
+            <input value={monthlyPay} onChange={(e) => setMonthlyPay(e.target.value.replace(/[^0-9]/g, ""))}
+              inputMode="numeric" placeholder="예: 2200000"
+              className="w-full border rounded-lg px-3 py-2 outline-none" style={inputStyle} />
+          ) : (
+            <input value={wage} onChange={(e) => setWage(e.target.value.replace(/[^0-9]/g, ""))}
+              inputMode="numeric" placeholder="예: 10030"
+              className="w-full border rounded-lg px-3 py-2 outline-none" style={inputStyle} />
+          )}
         </div>
         <div className="flex-1">
           <label className="block text-sm font-semibold mb-1" style={{ color: C.ink }}>표시</label>
@@ -155,75 +207,72 @@ function EmployeeEditor({ employee, fixedShifts, onBack, onChanged }) {
         </div>
       </div>
 
-      {/* 수당 지급 여부 */}
-      <label className="block text-sm font-semibold mb-1 mt-3" style={{ color: C.ink }}>수당 지급</label>
-      <div className="flex flex-col gap-2">
-        <button onClick={() => setWeeklyAllow((v) => !v)}
-          className="flex items-center justify-between rounded-lg px-3 py-2.5 border text-sm"
-          style={{ borderColor: weeklyAllow ? C.accent : C.line, background: weeklyAllow ? "#E9F6F3" : "#fff" }}>
-          <span style={{ color: C.ink }}>주휴수당 지급 <span style={{ color: C.sub }}>(주 15시간 이상 시)</span></span>
-          <span className="font-bold" style={{ color: weeklyAllow ? C.accent : C.sub }}>{weeklyAllow ? "✓ 지급" : "미지급"}</span>
-        </button>
-        <button onClick={() => setNightAllow((v) => !v)}
-          className="flex items-center justify-between rounded-lg px-3 py-2.5 border text-sm"
-          style={{ borderColor: nightAllow ? C.accent : C.line, background: nightAllow ? "#E9F6F3" : "#fff" }}>
-          <span style={{ color: C.ink }}>야간수당 지급 <span style={{ color: C.sub }}>(22~06시 ×1.5)</span></span>
-          <span className="font-bold" style={{ color: nightAllow ? C.accent : C.sub }}>{nightAllow ? "✓ 지급" : "미지급"}</span>
-        </button>
-      </div>
+      {/* 수당 (시급제만) */}
+      {!monthly && (
+        <div className="flex flex-col gap-2 mt-3">
+          <button onClick={() => setWeeklyAllow((v) => !v)}
+            className="flex items-center justify-between rounded-lg px-3 py-2.5 border text-sm"
+            style={{ borderColor: weeklyAllow ? C.accent : C.line, background: weeklyAllow ? "#E9F6F3" : "#fff" }}>
+            <span style={{ color: C.ink }}>주휴수당 지급 <span style={{ color: C.sub }}>(주 15시간 이상 시)</span></span>
+            <span className="font-bold" style={{ color: weeklyAllow ? C.accent : C.sub }}>{weeklyAllow ? "✓ 지급" : "미지급"}</span>
+          </button>
+          <button onClick={() => setNightAllow((v) => !v)}
+            className="flex items-center justify-between rounded-lg px-3 py-2.5 border text-sm"
+            style={{ borderColor: nightAllow ? C.accent : C.line, background: nightAllow ? "#E9F6F3" : "#fff" }}>
+            <span style={{ color: C.ink }}>야간수당 지급 <span style={{ color: C.sub }}>(22~06시 ×1.5)</span></span>
+            <span className="font-bold" style={{ color: nightAllow ? C.accent : C.sub }}>{nightAllow ? "✓ 지급" : "미지급"}</span>
+          </button>
+        </div>
+      )}
 
       <label className="block text-sm font-semibold mb-1 mt-3" style={{ color: C.ink }}>메모</label>
       <input value={memo} onChange={(e) => setMemo(e.target.value)} placeholder="예: 주말만 가능"
         className="w-full border rounded-lg px-3 py-2 outline-none" style={inputStyle} />
 
-      {/* 고정근무 */}
+      {/* 고정근무 (신규/기존 모두 가능) */}
       <div className="mt-5 pt-4" style={{ borderTop: `1px solid ${C.line}` }}>
-        <div className="font-bold text-sm mb-1" style={{ color: C.ink }}>⏰ 고정근무 (매주 반복)</div>
-        {!employee?.id && <div className="text-xs mb-2" style={{ color: C.sub }}>직원을 먼저 저장하면 추가할 수 있어요.</div>}
+        <div className="font-bold text-sm mb-2" style={{ color: C.ink }}>⏰ 고정근무 (매주 반복)</div>
 
-        {fixedShifts.length > 0 && (
+        {fixedList.length > 0 && (
           <div className="space-y-1 mb-3">
-            {[...fixedShifts].sort((a, b) => a.day - b.day).map((f) => (
-              <div key={f.id} className="flex items-center gap-2 text-sm rounded-lg px-3 py-1.5" style={{ background: "#F4F3EE" }}>
+            {[...fixedList].sort((a, b) => a.day - b.day).map((f) => (
+              <div key={f.id || f.tempId} className="flex items-center gap-2 text-sm rounded-lg px-3 py-1.5" style={{ background: "#F4F3EE" }}>
                 <span className="font-semibold" style={{ color: C.ink }}>{DAY_NAMES[f.day]}</span>
                 <span style={{ color: C.sub }}>{f.start_time || "?"}~{f.end_time || "?"}{f.role ? ` · ${f.role}` : ""}</span>
-                <button onClick={() => delFixed(f.id)} className="ml-auto text-sm" style={{ color: "#C0392B" }}>삭제</button>
+                <button onClick={() => delFixed(f)} className="ml-auto text-sm" style={{ color: "#C0392B" }}>삭제</button>
               </div>
             ))}
           </div>
         )}
 
-        {employee?.id && (
-          <div className="rounded-lg p-3" style={{ background: "#FAF9F6", border: `1px solid ${C.line}` }}>
-            <div className="flex flex-wrap gap-1.5 mb-2">
-              {DAY_NAMES.map((dn, i) => (
-                <button key={i} onClick={() => toggleDay(i)}
-                  className="text-sm w-9 h-9 rounded-full border"
-                  style={fDays.includes(i)
-                    ? { background: C.accent, color: "#fff", borderColor: C.accent }
-                    : { background: "#fff", color: C.sub, borderColor: C.line }}>
-                  {dn}
-                </button>
-              ))}
-            </div>
-            <div className="flex gap-2 mb-2">
-              <input type="time" value={fStart} onChange={(e) => setFStart(e.target.value)}
-                className="flex-1 border rounded-lg px-2 py-2 outline-none" style={inputStyle} />
-              <input type="time" value={fEnd} onChange={(e) => setFEnd(e.target.value)}
-                className="flex-1 border rounded-lg px-2 py-2 outline-none" style={inputStyle} />
-            </div>
-            <input value={fRole} onChange={(e) => setFRole(e.target.value)}
-              list="role-presets" placeholder="역할 (예: 오픈)"
-              className="w-full border rounded-lg px-3 py-2 outline-none mb-2" style={inputStyle} />
-            <datalist id="role-presets">
-              {ROLE_PRESETS.map((r) => <option key={r} value={r} />)}
-            </datalist>
-            <button onClick={addFixed} disabled={busy}
-              className="w-full py-2 rounded-lg font-semibold text-sm text-white" style={{ background: C.accent }}>
-              ＋ 고정근무 추가
-            </button>
+        <div className="rounded-lg p-3" style={{ background: "#FAF9F6", border: `1px solid ${C.line}` }}>
+          <div className="flex flex-wrap gap-1.5 mb-2">
+            {DAY_NAMES.map((dn, i) => (
+              <button key={i} onClick={() => toggleDay(i)}
+                className="text-sm w-9 h-9 rounded-full border"
+                style={fDays.includes(i) ? { background: C.accent, color: "#fff", borderColor: C.accent } : { background: "#fff", color: C.sub, borderColor: C.line }}>
+                {dn}
+              </button>
+            ))}
           </div>
-        )}
+          <div className="flex gap-2 mb-2">
+            <input type="time" value={fStart} onChange={(e) => setFStart(e.target.value)}
+              className="flex-1 border rounded-lg px-2 py-2 outline-none" style={inputStyle} />
+            <input type="time" value={fEnd} onChange={(e) => setFEnd(e.target.value)}
+              className="flex-1 border rounded-lg px-2 py-2 outline-none" style={inputStyle} />
+          </div>
+          <input value={fRole} onChange={(e) => setFRole(e.target.value)}
+            list="role-presets" placeholder="역할 (예: 오픈)"
+            className="w-full border rounded-lg px-3 py-2 outline-none mb-2" style={inputStyle} />
+          <datalist id="role-presets">
+            {ROLE_PRESETS.map((r) => <option key={r} value={r} />)}
+          </datalist>
+          <button onClick={addFixed} disabled={busy}
+            className="w-full py-2 rounded-lg font-semibold text-sm text-white" style={{ background: C.accent }}>
+            ＋ 고정근무 추가
+          </button>
+          <div className="text-[11px] mt-2" style={{ color: C.sub }}>요일을 여러 개 선택할 수 있어요.</div>
+        </div>
       </div>
 
       {err && <div className="text-xs mt-3" style={{ color: "#D81B60" }}>{err}</div>}

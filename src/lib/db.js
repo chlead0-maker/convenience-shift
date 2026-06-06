@@ -154,17 +154,30 @@ export function subscribeWeek(weekStart, onChange) {
 }
 
 /* ---------- 타임라인 이벤트 (물류 입고 등) ---------- */
+// 이번 주 단발성 이벤트 + 매주 반복 이벤트(시작주 이후) 합쳐서 반환
 export async function fetchEvents(weekStart) {
-  const { data, error } = await supabase.from("events").select("*").eq("week_start", weekStart);
-  if (error) throw error;
-  return data || [];
+  const [once, recurring] = await Promise.all([
+    supabase.from("events").select("*").eq("week_start", weekStart).neq("repeat", "weekly"),
+    supabase.from("events").select("*").eq("repeat", "weekly").lte("week_start", weekStart),
+  ]);
+  if (once.error) throw once.error;
+  if (recurring.error) throw recurring.error;
+  return [...(once.data || []), ...(recurring.data || [])];
 }
 
 export async function insertEvent(ev) {
   const { error } = await supabase.from("events").insert({
     week_start: ev.week_start, day: ev.day,
     time: ev.time || null, title: ev.title, color: ev.color || null,
+    repeat: ev.repeat || "none",
   });
+  if (error) throw error;
+}
+
+export async function updateEvent(ev) {
+  const { error } = await supabase.from("events").update({
+    day: ev.day, time: ev.time || null, title: ev.title, repeat: ev.repeat || "none",
+  }).eq("id", ev.id);
   if (error) throw error;
 }
 
@@ -238,6 +251,7 @@ export async function insertEmployee(emp) {
   const { data, error } = await supabase.from("employees").insert({
     name: emp.name, color: emp.color || null, wage: emp.wage || 0, memo: emp.memo || null,
     weekly_allowance: !!emp.weekly_allowance, night_allowance: !!emp.night_allowance,
+    pay_type: emp.pay_type || "hourly", monthly_pay: emp.monthly_pay || 0,
   }).select().single();
   if (error) throw error;
   return data;
@@ -248,6 +262,7 @@ export async function updateEmployee(emp) {
     name: emp.name, color: emp.color || null, wage: emp.wage || 0,
     memo: emp.memo || null, active: emp.active !== false,
     weekly_allowance: !!emp.weekly_allowance, night_allowance: !!emp.night_allowance,
+    pay_type: emp.pay_type || "hourly", monthly_pay: emp.monthly_pay || 0,
   }).eq("id", emp.id);
   if (error) throw error;
 }
