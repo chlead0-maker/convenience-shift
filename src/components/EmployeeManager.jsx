@@ -70,6 +70,8 @@ function EmployeeEditor({ employee, fixedShifts, onBack, onChanged }) {
   const [active, setActive] = useState(employee?.active !== false);
   const [weeklyAllow, setWeeklyAllow] = useState(!!employee?.weekly_allowance);
   const [nightAllow, setNightAllow] = useState(!!employee?.night_allowance);
+  const [joinDate, setJoinDate] = useState(employee?.join_date || "");
+  const [firstWorkDate, setFirstWorkDate] = useState(employee?.first_work_date || "");
   const [err, setErr] = useState("");
   const [busy, setBusy] = useState(false);
 
@@ -93,6 +95,7 @@ function EmployeeEditor({ employee, fixedShifts, onBack, onChanged }) {
     memo: memo.trim(), active,
     weekly_allowance: monthly ? false : weeklyAllow,
     night_allowance: monthly ? false : nightAllow,
+    join_date: joinDate || null, first_work_date: firstWorkDate || null,
   });
 
   const saveEmployee = async () => {
@@ -224,6 +227,21 @@ function EmployeeEditor({ employee, fixedShifts, onBack, onChanged }) {
           </button>
         </div>
       )}
+
+      {/* 입사일 / 첫 근무일 */}
+      <div className="flex gap-3 mt-3">
+        <div className="flex-1">
+          <label className="block text-sm font-semibold mb-1" style={{ color: C.ink }}>입사일</label>
+          <input type="date" value={joinDate} onChange={(e) => setJoinDate(e.target.value)}
+            className="w-full border rounded-lg px-3 py-2 outline-none" style={inputStyle} />
+        </div>
+        <div className="flex-1">
+          <label className="block text-sm font-semibold mb-1" style={{ color: C.ink }}>첫 근무일</label>
+          <input type="date" value={firstWorkDate} onChange={(e) => setFirstWorkDate(e.target.value)}
+            className="w-full border rounded-lg px-3 py-2 outline-none" style={inputStyle} />
+        </div>
+      </div>
+      <div className="text-[11px] mt-1" style={{ color: C.sub }}>첫 근무일 이전 날짜는 “고정근무 채우기”에서 자동 제외돼요.</div>
 
       <label className="block text-sm font-semibold mb-1 mt-3" style={{ color: C.ink }}>메모</label>
       <input value={memo} onChange={(e) => setMemo(e.target.value)} placeholder="예: 주말만 가능"

@@ -206,14 +206,18 @@ function parseDate(s) {
   return new Date(y, m - 1, d);
 }
 
-// 여러 주의 시프트/특이사항을 실제 날짜별로 묶어서 반환
+// 여러 주의 시프트/특이사항을 실제 날짜별로 묶어서 반환 (+ 휴무)
 export async function fetchMonth(weekStarts) {
-  const [shiftsRes, specialRes] = await Promise.all([
+  const firstMon = weekStarts[0];
+  const lastSun = isoDate(addDays(parseDate(weekStarts[weekStarts.length - 1]), 6));
+  const [shiftsRes, specialRes, offRes] = await Promise.all([
     supabase.from("shifts").select("*").in("week_start", weekStarts),
     supabase.from("special_days").select("*").in("week_start", weekStarts),
+    supabase.from("days_off").select("*").gte("date", firstMon).lte("date", lastSun),
   ]);
   if (shiftsRes.error) throw shiftsRes.error;
   if (specialRes.error) throw specialRes.error;
+  if (offRes.error) throw offRes.error;
 
   const shiftsByDate = {};
   (shiftsRes.data || []).forEach((r) => {
@@ -229,7 +233,7 @@ export async function fetchMonth(weekStarts) {
     specialByDate[isoDate(addDays(parseDate(r.week_start), r.day))] = r.note;
   });
 
-  return { shiftsByDate, specialByDate };
+  return { shiftsByDate, specialByDate, daysOff: offRes.data || [] };
 }
 
 /* ============================================================
@@ -252,6 +256,7 @@ export async function insertEmployee(emp) {
     name: emp.name, color: emp.color || null, wage: emp.wage || 0, memo: emp.memo || null,
     weekly_allowance: !!emp.weekly_allowance, night_allowance: !!emp.night_allowance,
     pay_type: emp.pay_type || "hourly", monthly_pay: emp.monthly_pay || 0,
+    join_date: emp.join_date || null, first_work_date: emp.first_work_date || null,
   }).select().single();
   if (error) throw error;
   return data;
@@ -263,6 +268,7 @@ export async function updateEmployee(emp) {
     memo: emp.memo || null, active: emp.active !== false,
     weekly_allowance: !!emp.weekly_allowance, night_allowance: !!emp.night_allowance,
     pay_type: emp.pay_type || "hourly", monthly_pay: emp.monthly_pay || 0,
+    join_date: emp.join_date || null, first_work_date: emp.first_work_date || null,
   }).eq("id", emp.id);
   if (error) throw error;
 }
@@ -325,6 +331,8 @@ export async function fillFixedShifts(weekKey, weekDates) {
     const emp = empById[f.employee_id];
     if (!emp || emp.active === false) return;
     const date = weekDates[f.day];
+    const startDate = emp.first_work_date || emp.join_date;        // 입사/첫근무 전이면 제외
+    if (startDate && date < startDate) return;
     if (offSet.has(`${f.employee_id}|${date}`)) return;            // 휴무 제외
     if (existKey.has(`${emp.name}|${f.day}|${f.start_time || ""}`)) return; // 중복 제외
     rows.push({

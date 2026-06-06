@@ -9,9 +9,10 @@ import {
   fetchWeek, insertShift, updateShift, deleteShift,
   setSpecial as dbSetSpecial, fetchStoreName, saveStoreName, subscribeWeek,
   fetchMonth, monthWeekStarts, subscribeAll,
-  fetchEmployees, fetchFixedShifts, fetchDaysOff, fillFixedShifts, subscribeRoster,
-  fetchEvents,
+  fetchEmployees, fetchFixedShifts, fetchDaysOff, subscribeRoster,
+  fetchEvents, addDayOff,
 } from "./lib/db";
+import { virtualShiftsForDate, mergeReal } from "./lib/fixed";
 import ShiftCard from "./components/ShiftCard";
 import ShiftModal from "./components/ShiftModal";
 import SpecialModal from "./components/SpecialModal";
@@ -176,10 +177,27 @@ function Scheduler() {
       await refresh();
     } catch (e) { setError(e?.message || "저장에 실패했어요."); }
   };
-  const removeShift = async (id) => {
+  const removeShift = async () => {
+    const init = modal?.initial;
     setModal(null);
-    try { await deleteShift(id); await refresh(); }
-    catch (e) { setError(e?.message || "삭제에 실패했어요."); }
+    try {
+      if (init?._virtual) {
+        // 고정근무 자동 표시분 삭제 = 그 날 휴무 처리 (다시 안 생기게)
+        await addDayOff(init._empId, init._date);
+      } else if (init?.id) {
+        await deleteShift(init.id);
+      }
+      await refresh();
+    } catch (e) { setError(e?.message || "삭제에 실패했어요."); }
+  };
+
+  // 시프트 편집 진입 (가상=고정근무면 id 없이 열어 저장 시 실제로 전환)
+  const openEdit = (s) => {
+    if (s._virtual) {
+      setModal({ dayIndex: s.day, initial: { name: s.name, start: s.start, end: s.end, role: s.role, _virtual: true, _empId: s._empId, _date: s._date } });
+    } else {
+      setModal({ dayIndex: s.day, initial: s });
+    }
   };
   const handleSpecial = async (day, text) => {
     setSpecialModal(null);
@@ -193,15 +211,6 @@ function Scheduler() {
     try { await saveStoreName(v); } catch (e) { setError(e?.message || "매장 이름 저장에 실패했어요."); }
   };
 
-  const handleFill = async () => {
-    try {
-      const n = await fillFixedShifts(weekKey, weekDates);
-      await refresh();
-      alert(n > 0
-        ? `고정근무 ${n}건을 이번 주에 채웠어요.`
-        : "추가할 고정근무가 없어요. (이미 있거나 · 휴무 · 직원/고정근무 미등록)");
-    } catch (e) { setError(e?.message || "고정근무 채우기에 실패했어요."); }
-  };
 
   // 기간 이동
   const go = (dir) => {
@@ -216,19 +225,39 @@ function Scheduler() {
   else if (view === "month") periodLabel = `${year}년 ${month + 1}월`;
   else periodLabel = `${fmtMD(monday)} ~ ${fmtMD(addDays(monday, 6))}`;
 
-  // 인건비 계산 대상 (시프트 + 실제 날짜)
+  // 고정근무 자동 반영 — 실제 시프트 + 가상(고정) 병합
+  const empById = Object.fromEntries(employees.map((e) => [e.id, e]));
   const empByName = Object.fromEntries(employees.map((e) => [e.name, e]));
+  const weekOffSet = new Set(daysOff.map((o) => `${o.employee_id}|${o.date}`));
+  const weekVirtual = weekDates.flatMap((dateIso, i) => virtualShiftsForDate(dateIso, i, fixedShifts, empById, weekOffSet));
+  const mergedWeekShifts = mergeReal(week.shifts, weekVirtual);
+
+  // 월간 병합 (달력 6주 격자의 모든 날짜)
+  const monthMergedByDate = {};
+  if (view === "month") {
+    const monthOffSet = new Set((monthData.daysOff || []).map((o) => `${o.employee_id}|${o.date}`));
+    const gridStart = getMonday(new Date(year, month, 1));
+    for (let i = 0; i < 42; i++) {
+      const d = addDays(gridStart, i);
+      const key = isoDate(d);
+      const real = monthData.shiftsByDate[key] || [];
+      const v = virtualShiftsForDate(key, i % 7, fixedShifts, empById, monthOffSet);
+      monthMergedByDate[key] = mergeReal(real, v);
+    }
+  }
+
+  // 인건비 계산 대상 (시프트 + 실제 날짜)
   let laborEntries, includeWeekly, summaryTitle;
   if (view === "month") {
-    laborEntries = Object.entries(monthData.shiftsByDate).flatMap(([date, list]) =>
+    laborEntries = Object.entries(monthMergedByDate).flatMap(([date, list]) =>
       list.map((s) => ({ name: s.name, start: s.start, end: s.end, date })));
     includeWeekly = true; summaryTitle = "이 달 근무 요약";
   } else if (view === "day") {
-    laborEntries = week.shifts.filter((s) => s.day === dayIndex)
+    laborEntries = mergedWeekShifts.filter((s) => s.day === dayIndex)
       .map((s) => ({ name: s.name, start: s.start, end: s.end, date: weekDates[dayIndex] }));
     includeWeekly = false; summaryTitle = "이 날 근무 요약";
   } else {
-    laborEntries = week.shifts.map((s) => ({ name: s.name, start: s.start, end: s.end, date: weekDates[s.day] }));
+    laborEntries = mergedWeekShifts.map((s) => ({ name: s.name, start: s.start, end: s.end, date: weekDates[s.day] }));
     includeWeekly = true; summaryTitle = "주간 근무 요약";
   }
   const salaryFactor = view === "month" ? 1 : view === "day" ? 1 / 30 : 1 / 4.345;
@@ -255,12 +284,12 @@ function Scheduler() {
   // 타임라인용 days 배열
   const weekDays = DAY_NAMES.map((dn, i) => ({
     dayIndex: i, date: addDays(monday, i), dayName: dn,
-    shifts: week.shifts.filter((s) => s.day === i), special: week.special[i],
+    shifts: mergedWeekShifts.filter((s) => s.day === i), special: week.special[i],
     offNames: offByDay[i] || [], events: eventsByDay[i] || [],
   }));
   const dayDays = [{
     dayIndex, date: addDays(monday, dayIndex), dayName: DAY_NAMES[dayIndex],
-    shifts: week.shifts.filter((s) => s.day === dayIndex), special: week.special[dayIndex],
+    shifts: mergedWeekShifts.filter((s) => s.day === dayIndex), special: week.special[dayIndex],
     offNames: offByDay[dayIndex] || [], events: eventsByDay[dayIndex] || [],
   }];
 
@@ -337,17 +366,13 @@ function Scheduler() {
                   className="text-sm font-semibold px-3 py-1.5 rounded-lg border" style={{ color: C.ink, borderColor: C.line, background: C.card }}>
                   📦 이벤트
                 </button>
-                <button onClick={handleFill}
-                  className="text-sm font-semibold px-3 py-1.5 rounded-lg text-white" style={{ background: C.accent }}>
-                  ⏰ 고정근무 채우기
-                </button>
               </>
             )}
+            <button onClick={() => setTipsOpen(true)}
+              className="text-sm font-semibold px-3 py-1.5 rounded-lg border" style={{ color: "#9A6B00", borderColor: "#F2D98C", background: "#FFF8E6" }}>
+              💡 꿀팁
+            </button>
           </div>
-          <button onClick={() => setTipsOpen(true)}
-            className="text-sm font-semibold px-3 py-1.5 rounded-lg border ml-auto" style={{ color: "#9A6B00", borderColor: "#F2D98C", background: "#FFF8E6" }}>
-            💡 꿀팁
-          </button>
         </div>
 
         {/* share note */}
@@ -369,7 +394,7 @@ function Scheduler() {
               <MonthGrid
                 anchorDate={anchorDate}
                 today={today}
-                shiftsByDate={monthData.shiftsByDate}
+                shiftsByDate={monthMergedByDate}
                 specialByDate={monthData.specialByDate}
                 empByName={empByName}
                 onPickDay={(d) => { setAnchorDate(d); changeView("day"); }}
@@ -396,7 +421,7 @@ function Scheduler() {
                       </button>
                       <div className="flex-1">
                         {dayShifts.map((s) => (
-                          <ShiftCard key={s.id} s={s} onClick={() => setModal({ dayIndex: d.dayIndex, initial: s })} />
+                          <ShiftCard key={s.id} s={s} onClick={() => openEdit(s)} />
                         ))}
                       </div>
                       <button onClick={() => setModal({ dayIndex: d.dayIndex, initial: null })}
@@ -411,7 +436,7 @@ function Scheduler() {
                 days={view === "day" ? dayDays : weekDays}
                 single={view === "day"}
                 today={today}
-                onEditShift={(s) => setModal({ dayIndex: s.day, initial: s })}
+                onEditShift={openEdit}
                 onAddShift={(i) => setModal({ dayIndex: i, initial: null })}
                 onEditSpecial={(i) => setSpecialModal(i)}
               />
