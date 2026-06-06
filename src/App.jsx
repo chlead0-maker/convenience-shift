@@ -59,6 +59,9 @@ function Scheduler() {
   const [dayOffOpen, setDayOffOpen] = useState(false);
   const [eventModalOpen, setEventModalOpen] = useState(false);
   const [tipsOpen, setTipsOpen] = useState(false);
+  const [bigFont, setBigFont] = useState(() => {
+    try { return localStorage.getItem("cvs-font") === "big"; } catch { return false; }
+  });
   const [view, setView] = useState(() => {
     try { return localStorage.getItem("cvs-view") || "week"; } catch { return "week"; }
   });
@@ -79,6 +82,12 @@ function Scheduler() {
     setView(v);
     try { localStorage.setItem("cvs-view", v); } catch { /* ignore */ }
   };
+
+  // 글씨 크게/작게 적용
+  useEffect(() => {
+    document.documentElement.style.fontSize = bigFont ? "21px" : "17.5px";
+    try { localStorage.setItem("cvs-font", bigFont ? "big" : "normal"); } catch { /* ignore */ }
+  }, [bigFont]);
 
   const refresh = useCallback(async () => {
     try {
@@ -324,18 +333,18 @@ function Scheduler() {
         {/* period nav */}
         <div className="flex items-center justify-between rounded-xl px-3 py-2.5 mb-4"
           style={{ background: C.card, border: `1px solid ${C.line}` }}>
-          <button onClick={() => go(-1)} className="px-3.5 py-2 rounded-lg font-bold text-base" style={{ background: "#F0EFEA", color: C.ink }}>← 이전</button>
+          <button onClick={() => go(-1)} className="px-3.5 py-2 rounded-lg font-bold text-base whitespace-nowrap" style={{ background: "#F0EFEA", color: C.ink }}>← 이전</button>
           <div className="text-center">
             <button onClick={() => setCalendarOpen(true)}
-              className="font-bold text-base sm:text-lg inline-flex items-center gap-1.5 px-2 py-0.5 rounded-lg"
+              className="font-bold text-base sm:text-lg inline-flex items-center gap-1.5 px-2 py-1 rounded-lg whitespace-nowrap"
               style={{ color: C.ink, background: "#F0EFEA" }}>
-              <span>📅</span><span>{periodLabel}</span>
+              <span>📅</span><span className="whitespace-nowrap">{periodLabel}</span>
             </button>
             <div>
               <button onClick={() => setAnchorDate(new Date())} className="text-xs underline" style={{ color: C.accent }}>오늘로</button>
             </div>
           </div>
-          <button onClick={() => go(1)} className="px-3.5 py-2 rounded-lg font-bold text-base" style={{ background: "#F0EFEA", color: C.ink }}>다음 →</button>
+          <button onClick={() => go(1)} className="px-3.5 py-2 rounded-lg font-bold text-base whitespace-nowrap" style={{ background: "#F0EFEA", color: C.ink }}>다음 →</button>
         </div>
 
         {/* view toggle + tools */}
@@ -343,7 +352,7 @@ function Scheduler() {
           <div className="flex gap-1 p-1 rounded-xl w-fit" style={{ background: "#ECEAE2" }}>
             {VIEWS.map(([v, label]) => (
               <button key={v} onClick={() => changeView(v)}
-                className="text-base font-semibold px-3.5 py-2 rounded-lg transition"
+                className="text-base font-semibold px-3.5 py-2 rounded-lg whitespace-nowrap transition"
                 style={view === v
                   ? { background: C.card, color: C.ink, boxShadow: "0 1px 2px rgba(0,0,0,0.08)" }
                   : { background: "transparent", color: C.sub }}>
@@ -353,24 +362,28 @@ function Scheduler() {
           </div>
           <div className="flex gap-2 flex-wrap">
             <button onClick={() => setEmpManagerOpen(true)}
-              className="text-base font-semibold px-3.5 py-2 rounded-lg border" style={{ color: C.ink, borderColor: C.line, background: C.card }}>
+              className="text-base font-semibold px-3.5 py-2 rounded-lg whitespace-nowrap border" style={{ color: C.ink, borderColor: C.line, background: C.card }}>
               👥 직원
             </button>
             {view !== "month" && (
               <>
                 <button onClick={() => setDayOffOpen(true)}
-                  className="text-base font-semibold px-3.5 py-2 rounded-lg border" style={{ color: C.ink, borderColor: C.line, background: C.card }}>
+                  className="text-base font-semibold px-3.5 py-2 rounded-lg whitespace-nowrap border" style={{ color: C.ink, borderColor: C.line, background: C.card }}>
                   🌴 휴무
                 </button>
                 <button onClick={() => setEventModalOpen(true)}
-                  className="text-base font-semibold px-3.5 py-2 rounded-lg border" style={{ color: C.ink, borderColor: C.line, background: C.card }}>
+                  className="text-base font-semibold px-3.5 py-2 rounded-lg whitespace-nowrap border" style={{ color: C.ink, borderColor: C.line, background: C.card }}>
                   📦 이벤트
                 </button>
               </>
             )}
             <button onClick={() => setTipsOpen(true)}
-              className="text-base font-semibold px-3.5 py-2 rounded-lg border" style={{ color: "#9A6B00", borderColor: "#F2D98C", background: "#FFF8E6" }}>
+              className="text-base font-semibold px-3.5 py-2 rounded-lg whitespace-nowrap border" style={{ color: "#9A6B00", borderColor: "#F2D98C", background: "#FFF8E6" }}>
               💡 꿀팁
+            </button>
+            <button onClick={() => setBigFont((v) => !v)}
+              className="text-base font-semibold px-3.5 py-2 rounded-lg whitespace-nowrap border" style={{ color: C.ink, borderColor: C.line, background: C.card }}>
+              {bigFont ? "🔍 글씨 작게" : "🔍 글씨 크게"}
             </button>
           </div>
         </div>
