@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from "react";
-import { C, DAY_NAMES, BAND } from "./lib/constants";
+import { C, DAY_NAMES } from "./lib/constants";
 import {
   isoDate, getMonday, addDays, fmtMD,
   personColor, hours, isSameDay, setColorOverrides,
@@ -13,7 +13,6 @@ import {
   fetchEvents, addDayOff,
 } from "./lib/db";
 import { virtualShiftsForDate, mergeReal } from "./lib/fixed";
-import ShiftCard from "./components/ShiftCard";
 import ShiftModal from "./components/ShiftModal";
 import SpecialModal from "./components/SpecialModal";
 import SetupNotice from "./components/SetupNotice";
@@ -36,7 +35,6 @@ const VIEWS = [
   ["day", "📅 일간"],
   ["week", "🗂 주간"],
   ["month", "🗓 월간"],
-  ["cards", "✏️ 카드"],
 ];
 
 function Scheduler() {
@@ -63,7 +61,7 @@ function Scheduler() {
     try { return localStorage.getItem("cvs-font") === "big"; } catch { return false; }
   });
   const [view, setView] = useState(() => {
-    try { return localStorage.getItem("cvs-view") || "week"; } catch { return "week"; }
+    try { const v = localStorage.getItem("cvs-view"); return v && v !== "cards" ? v : "week"; } catch { return "week"; }
   });
   const modalOpenRef = useRef(false);
 
@@ -412,38 +410,6 @@ function Scheduler() {
                 empByName={empByName}
                 onPickDay={(d) => { setAnchorDate(d); changeView("day"); }}
               />
-            ) : view === "cards" ? (
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-7 gap-3">
-                {weekDays.map((d) => {
-                  const isToday = isSameDay(d.date, today);
-                  const headColor = d.dayIndex === 6 ? "#D81B60" : d.dayIndex === 5 ? "#3B6EA8" : C.ink;
-                  const dayShifts = [...d.shifts].sort((a, b) => (a.start || "99").localeCompare(b.start || "99"));
-                  return (
-                    <div key={d.dayIndex} className="rounded-xl p-2.5 flex flex-col"
-                      style={{ background: C.card, border: isToday ? `2px solid ${C.accent}` : `1px solid ${C.line}`, minHeight: 130 }}>
-                      <div className="flex items-baseline justify-between mb-1">
-                        <div className="font-bold text-lg" style={{ color: headColor }}>
-                          {d.dayName}<span className="text-sm ml-1" style={{ color: C.sub }}>{fmtMD(d.date)}</span>
-                        </div>
-                        {isToday && <span className="text-sm font-bold" style={{ color: C.accent }}>오늘</span>}
-                      </div>
-                      <button onClick={() => setSpecialModal(d.dayIndex)}
-                        className="text-left text-sm rounded px-2 py-1.5 mb-2 truncate"
-                        style={d.special ? { background: "#FFF4DA", color: "#9A6B00", fontWeight: 600 } : { background: "#F4F3EE", color: C.sub }}>
-                        {d.special ? `⚑ ${d.special}` : "+ 특이사항"}
-                      </button>
-                      <div className="flex-1">
-                        {dayShifts.map((s) => (
-                          <ShiftCard key={s.id} s={s} onClick={() => openEdit(s)} />
-                        ))}
-                      </div>
-                      <button onClick={() => setModal({ dayIndex: d.dayIndex, initial: null })}
-                        className="w-full mt-1 py-2 rounded-lg text-base font-semibold border border-dashed"
-                        style={{ color: C.accent, borderColor: C.accent }}>+ 시프트</button>
-                    </div>
-                  );
-                })}
-              </div>
             ) : (
               <WeekTimeline
                 days={view === "day" ? dayDays : weekDays}
@@ -457,13 +423,7 @@ function Scheduler() {
 
             {/* legend */}
             <div className="flex flex-wrap items-center gap-3 mt-4 text-sm" style={{ color: C.sub }}>
-              {view === "cards" ? (
-                Object.values(BAND).filter((b) => b.label).map((b) => (
-                  <span key={b.label} className="flex items-center gap-1.5">
-                    <span style={{ width: 12, height: 12, borderRadius: 3, background: b.bar }} /> {b.label}
-                  </span>
-                ))
-              ) : view === "month" ? (
+              {view === "month" ? (
                 <span>날짜를 누르면 그 날의 타임라인으로 이동해요</span>
               ) : (
                 <>
